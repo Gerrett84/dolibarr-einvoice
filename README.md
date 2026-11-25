@@ -85,7 +85,6 @@ Getrennt für Mails **mit** und **ohne** E-Rechnung:
 4. IMAP muss für das Postfach aktiviert sein
 
 ## Geplant
-- Anzahlungs- und Schlussrechnungen (Typ 386/875–877) mit Verrechnung der Anzahlungen
 - später: Ausgang – eigene Rechnungen als ZUGFeRD/XRechnung erzeugen
 
 ## Tests
@@ -99,6 +98,7 @@ php tests/fake_imap_server.php 10143 /tmp/imap.log & sleep 1; php tests/run_imap
 ### v0.3.0
 - Prüfhinweise in der Detailansicht (Empfänger, Profil, Pflichtangaben, IBAN-Prüfziffer, geänderte Bankverbindung, Rechenfehler)
 - Anhänge aus XRechnung (BG-24) und ZUGFeRD-PDF: Anzeige, Download, Übernahme in die Lieferantenrechnung; Dubletten zwischen XML und PDF werden zusammengefasst
+- Anzahlungen: Vorauszahlungs- und Abschlagsrechnungen (Typ 386, 875) werden als Anzahlungsrechnung angelegt; bei Schlussrechnungen mit „bereits gezahlt“ werden die offenen Anzahlungen des Lieferanten zur Auswahl angeboten (passende vorausgewählt) und wie „In Rabatt umwandeln“ verrechnet
 - PDF-Lesen robuster: falsche `/Length`-Angaben, beschädigtes Stream-Ende, `/Subtype /application#2Foctet-stream`
 
 ### v0.2.0

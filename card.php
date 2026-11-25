@@ -106,7 +106,13 @@ if ($canWrite) {
 		$action = 'createsupplier';
 	}
 	if ($action === 'confirm_createinvoice' && $confirm === 'yes' && $canInvoice) {
-		$fid = $doc->createSupplierInvoice($user, GETPOSTINT('sourceid'));
+		$depIds = array();
+		foreach ($doc->getDepositCandidates()['available'] as $depId => $c) {
+			if (GETPOST('dep_'.$depId, 'alpha') !== '') {
+				$depIds[] = $depId;
+			}
+		}
+		$fid = $doc->createSupplierInvoice($user, GETPOSTINT('sourceid'), $depIds);
 		if ($fid > 0) {
 			setEventMessages($langs->trans('EInvoiceSupplierInvoiceCreated'), null, 'mesgs');
 			if ($doc->warnings) {
@@ -148,7 +154,29 @@ if ($action === 'createinvoice' && $canInvoice && $doc->fk_soc && !$doc->fk_fact
 		}
 		$questions[] = array('type' => 'select', 'name' => 'sourceid', 'label' => $langs->trans('EInvoiceCorrectedInvoice'), 'values' => $opts, 'default' => $sourceId, 'select_show_empty' => 1);
 	}
-	print $form->formconfirm($self, $langs->trans('EInvoiceCreateSupplierInvoice'), $langs->trans($doc->isCreditNote() ? 'EInvoiceConfirmCreateCreditNote' : 'EInvoiceConfirmCreateInvoice'), 'confirm_createinvoice', $questions, 'yes', 1, $questions ? 250 : 0, 600);
+	$text = $langs->trans($doc->isCreditNote() ? 'EInvoiceConfirmCreateCreditNote' : 'EInvoiceConfirmCreateInvoice');
+	if ($doc->isDeposit()) {
+		$text .= '<br><br>'.$langs->trans('EInvoiceCreateAsDeposit');
+	} elseif (!$doc->isCreditNote()) {
+		$cands = $doc->getDepositCandidates();
+		$prepaid = $details ? (float) $details['prepaid'] : 0;
+		if ($cands['available']) {
+			$text .= '<br><br>'.$langs->trans('EInvoiceDepositsChoose').($prepaid > 0 ? ' '.$langs->trans('EInvoiceDepositsPrepaid', price($prepaid, 0, $langs, 1, -1, 2, $conf->currency)) : '');
+			foreach ($cands['available'] as $depId => $c) {
+				$label = dol_escape_htmltag($c['ref'].($c['ref_supplier'] !== '' ? ' – '.$c['ref_supplier'] : '')).' · '.dol_print_date($c['date'], 'day').' · <b>'.price($c['total_ttc'], 0, $langs, 1, -1, 2, $conf->currency).'</b>';
+				if (!$c['paid']) {
+					$label .= ' <span class="opacitymedium">('.$langs->trans('EInvoiceDepositUnpaid').')</span>';
+				}
+				$questions[] = array('type' => 'checkbox', 'name' => 'dep_'.$depId, 'label' => $label, 'value' => in_array($depId, $cands['preselect'], true));
+			}
+		} elseif ($prepaid > 0) {
+			$text .= '<br><br>'.$langs->trans('EInvoiceDepositsNone', price($prepaid, 0, $langs, 1, -1, 2, $conf->currency));
+		}
+		if ($cands['drafts']) {
+			$text .= '<br>'.$langs->trans('EInvoiceDepositsDraft', dol_escape_htmltag(implode(', ', $cands['drafts'])));
+		}
+	}
+	print $form->formconfirm($self, $langs->trans('EInvoiceCreateSupplierInvoice'), $text, 'confirm_createinvoice', $questions, 'yes', 1, $questions ? 200 + 30 * count($questions) : 0, 650);
 }
 if ($action === 'delete' && $canWrite) {
 	print $form->formconfirm($self, $langs->trans('Delete'), $langs->trans('EInvoiceConfirmDelete'), 'confirm_delete', '', 0, 1);

@@ -440,6 +440,152 @@ class EInvoiceInbox
 	}
 
 	/**
+	 * Prepayment / partial construction invoice: becomes a deposit invoice in Dolibarr.
+	 *
+	 * @return bool
+	 */
+	public function isDeposit()
+	{
+		return in_array((string) $this->doc_type, array('386', '875'), true);
+	}
+
+	/**
+	 * Deposit invoices of the linked supplier that can be deducted from a final invoice.
+	 *
+	 * available: validated deposits whose discount is not used yet (or not created yet), by id, with
+	 *            ref, ref_supplier, date, total_ht, total_ttc, paid, discounts (unused discount ids, empty = convert first)
+	 * drafts:    deposits still in draft (must be validated first), by id => ref
+	 * preselect: ids that are probably meant (billing reference or sum equal to the prepaid amount)
+	 *
+	 * @return array{available:array<int,array<string,mixed>>,drafts:array<int,string>,preselect:int[]}
+	 */
+	public function getDepositCandidates()
+	{
+		$res = array('available' => array(), 'drafts' => array(), 'preselect' => array());
+		if (!$this->fk_soc) {
+			return $res;
+		}
+		$sql = "SELECT f.rowid, f.ref, f.ref_supplier, f.datef, f.total_ht, f.total_ttc, f.fk_statut, f.paye FROM ".MAIN_DB_PREFIX."facture_fourn as f";
+		$sql .= " WHERE f.fk_soc = ".((int) $this->fk_soc)." AND f.type = 3 AND f.entity IN (".getEntity('supplier_invoice').")";
+		$sql .= " ORDER BY f.datef, f.rowid";
+		$resql = $this->db->query($sql);
+		while ($resql && ($o = $this->db->fetch_object($resql))) {
+			if ((int) $o->fk_statut === 0) {
+				$res['drafts'][(int) $o->rowid] = $o->ref;
+				continue;
+			}
+			$disc = array();
+			$used = false;
+			$sql2 = "SELECT rowid, fk_invoice_supplier, fk_invoice_supplier_line FROM ".MAIN_DB_PREFIX."societe_remise_except";
+			$sql2 .= " WHERE fk_invoice_supplier_source = ".((int) $o->rowid)." AND discount_type = 1";
+			$res2 = $this->db->query($sql2);
+			while ($res2 && ($r = $this->db->fetch_object($res2))) {
+				if ($r->fk_invoice_supplier || $r->fk_invoice_supplier_line) {
+					$used = true;
+				} else {
+					$disc[] = (int) $r->rowid;
+				}
+			}
+			if ($used || (int) $o->fk_statut === 3) { // already deducted or abandoned
+				continue;
+			}
+			$res['available'][(int) $o->rowid] = array(
+				'ref' => $o->ref, 'ref_supplier' => (string) $o->ref_supplier, 'date' => $this->db->jdate($o->datef),
+				'total_ht' => (float) $o->total_ht, 'total_ttc' => (float) $o->total_ttc, 'paid' => (int) $o->paye, 'discounts' => $disc,
+			);
+		}
+
+		// Preselection
+		$d = $this->getDetails();
+		$prepaid = $d ? (float) $d['prepaid'] : 0.0;
+		if ($res['available'] && $prepaid > 0) {
+			$byRef = array();
+			$norm = function ($s) {
+				return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $s));
+			};
+			if ($d['billing_ref'] !== '') {
+				foreach ($res['available'] as $id => $c) {
+					if ($c['ref_supplier'] !== '' && $norm($c['ref_supplier']) === $norm($d['billing_ref'])) {
+						$byRef[] = $id;
+					}
+				}
+			}
+			$sumAll = array_sum(array_column($res['available'], 'total_ttc'));
+			if ($byRef) {
+				$res['preselect'] = $byRef;
+			} elseif (abs($sumAll - $prepaid) < 0.011) {
+				$res['preselect'] = array_keys($res['available']);
+			} else {
+				foreach ($res['available'] as $id => $c) {
+					if (abs($c['total_ttc'] - $prepaid) < 0.011) {
+						$res['preselect'] = array($id);
+						break;
+					}
+				}
+			}
+		}
+		return $res;
+	}
+
+	/**
+	 * Convert a validated supplier deposit invoice into discounts, one per VAT rate
+	 * (same as the button "Convert into discount" on the supplier invoice).
+	 *
+	 * @param int  $facid Deposit invoice
+	 * @param User $user  User
+	 * @return int[]|false Ids of the created discounts
+	 */
+	public function convertDepositToDiscount($facid, $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/class/discount.class.php';
+		$dep = new FactureFournisseur($this->db);
+		if ($dep->fetch($facid) <= 0 || (int) $dep->type !== FactureFournisseur::TYPE_DEPOSIT || (int) $dep->status === 0) {
+			$this->error = 'Deposit invoice '.$facid.' not found or not validated';
+			return false;
+		}
+		$sum = array();
+		foreach ($dep->lines as $line) {
+			if ($line->product_type < 9 && $line->total_ht != 0) {
+				$k = $line->tva_tx.'|'.$line->vat_src_code;
+				if (!isset($sum[$k])) {
+					$sum[$k] = array('tva_tx' => (float) $line->tva_tx, 'code' => (string) $line->vat_src_code, 'ht' => 0.0, 'tva' => 0.0, 'ttc' => 0.0, 'mht' => 0.0, 'mtva' => 0.0, 'mttc' => 0.0);
+				}
+				$sum[$k]['ht'] += $line->total_ht;
+				$sum[$k]['tva'] += $line->total_tva;
+				$sum[$k]['ttc'] += $line->total_ttc;
+				$sum[$k]['mht'] += $line->multicurrency_total_ht;
+				$sum[$k]['mtva'] += $line->multicurrency_total_tva;
+				$sum[$k]['mttc'] += $line->multicurrency_total_ttc;
+			}
+		}
+		$ids = array();
+		foreach ($sum as $v) {
+			$disc = new DiscountAbsolute($this->db);
+			$disc->description = '(DEPOSIT)';
+			$disc->discount_type = 1;
+			$disc->fk_soc = $dep->socid;
+			$disc->socid = $dep->socid;
+			$disc->fk_invoice_supplier_source = $dep->id;
+			$disc->amount_ht = abs($v['ht']);
+			$disc->amount_tva = abs($v['tva']);
+			$disc->amount_ttc = abs($v['ttc']);
+			$disc->multicurrency_amount_ht = abs($v['mht']);
+			$disc->multicurrency_amount_tva = abs($v['mtva']);
+			$disc->multicurrency_amount_ttc = abs($v['mttc']);
+			$disc->tva_tx = abs($v['tva_tx']);
+			$disc->vat_src_code = $v['code'];
+			$r = $disc->create($user);
+			if ($r <= 0) {
+				$this->error = $disc->error;
+				return false;
+			}
+			$ids[] = (int) $r;
+		}
+		return $ids;
+	}
+
+	/**
 	 * Existing supplier invoice of the linked supplier with the same supplier reference.
 	 *
 	 * @return int Id or 0
@@ -479,11 +625,12 @@ class EInvoiceInbox
 	 * Lines, document level allowances/charges, due date and payment mode are taken over,
 	 * the original file is attached. Differences in the totals end up in $this->warnings.
 	 *
-	 * @param User $user     User
-	 * @param int  $sourceId Invoice corrected by a credit note (0 = search by billing reference)
+	 * @param User  $user       User
+	 * @param int   $sourceId   Invoice corrected by a credit note (0 = search by billing reference)
+	 * @param int[] $depositIds Supplier deposit invoices to deduct (see getDepositCandidates())
 	 * @return int Id of the supplier invoice, -1 error, -2 credit note without source invoice
 	 */
-	public function createSupplierInvoice($user, $sourceId = 0)
+	public function createSupplierInvoice($user, $sourceId = 0, $depositIds = array())
 	{
 		global $conf, $langs;
 		require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
@@ -536,7 +683,7 @@ class EInvoiceInbox
 		$fac = new FactureFournisseur($this->db);
 		$fac->socid = (int) $this->fk_soc;
 		$fac->ref_supplier = (string) $this->invoice_ref;
-		$fac->type = $credit ? FactureFournisseur::TYPE_CREDIT_NOTE : FactureFournisseur::TYPE_STANDARD;
+		$fac->type = $credit ? FactureFournisseur::TYPE_CREDIT_NOTE : ($this->isDeposit() ? FactureFournisseur::TYPE_DEPOSIT : FactureFournisseur::TYPE_STANDARD);
 		if ($credit && $sourceId > 0) {
 			$fac->fk_facture_source = (int) $sourceId;
 		}
@@ -626,23 +773,60 @@ class EInvoiceInbox
 				return -1;
 			}
 		}
+		// Deduct deposits (same as "Convert into discount" + "apply discount" by hand)
+		$appliedHt = 0.0;
+		$appliedTtc = 0.0;
+		$appliedRefs = array();
+		if (!$credit && !$this->isDeposit() && $depositIds) {
+			$cands = $this->getDepositCandidates();
+			foreach (array_unique(array_map('intval', (array) $depositIds)) as $depId) {
+				if (!isset($cands['available'][$depId])) {
+					continue;
+				}
+				$c = $cands['available'][$depId];
+				$remIds = $c['discounts'];
+				if (!$remIds) {
+					$remIds = $this->convertDepositToDiscount($depId, $user);
+					if ($remIds === false) {
+						$this->db->rollback();
+						return -1;
+					}
+				}
+				foreach ($remIds as $remId) {
+					if ($fac->insert_discount($remId) < 0) {
+						$this->error = $fac->error;
+						$this->db->rollback();
+						return -1;
+					}
+				}
+				$appliedHt += $c['total_ht'];
+				$appliedTtc += $c['total_ttc'];
+				$appliedRefs[] = $c['ref'].($c['ref_supplier'] !== '' ? ' ('.$c['ref_supplier'].')' : '');
+			}
+		}
+
 		// Round VAT per rate like the e-invoice does (instead of summing rounded line VAT)
 		$fac->update_price(1, '1');
 		$fac->fetch($id);
 
 		// Totals check: what Dolibarr computed vs. what the e-invoice says
 		$sign = $credit ? -1 : 1;
-		if ($d['tax_basis'] !== null && abs($fac->total_ht - $sign * $d['tax_basis']) > 0.011) {
-			$this->warnings[] = $langs->trans('EInvoiceTotalMismatch', $langs->transnoentities('AmountHT'), price($sign * $d['tax_basis']), price($fac->total_ht));
+		if ($d['tax_basis'] !== null && abs($fac->total_ht - $sign * $d['tax_basis'] + $appliedHt) > 0.011) {
+			$this->warnings[] = $langs->trans('EInvoiceTotalMismatch', $langs->transnoentities('AmountHT'), price($sign * $d['tax_basis'] - $appliedHt), price($fac->total_ht));
 		}
-		if ($d['grand_total'] !== null && abs($fac->total_ttc - $sign * $d['grand_total']) > 0.011) {
-			$this->warnings[] = $langs->trans('EInvoiceTotalMismatch', $langs->transnoentities('AmountTTC'), price($sign * $d['grand_total']), price($fac->total_ttc));
+		if ($d['grand_total'] !== null && abs($fac->total_ttc - $sign * $d['grand_total'] + $appliedTtc) > 0.011) {
+			$this->warnings[] = $langs->trans('EInvoiceTotalMismatch', $langs->transnoentities('AmountTTC'), price($sign * $d['grand_total'] - $appliedTtc), price($fac->total_ttc));
+		}
+		if ($appliedRefs) {
+			$this->warnings[] = $langs->trans('EInvoiceDepositsApplied', implode(', ', $appliedRefs), price($appliedTtc));
 		}
 		if (!empty($d['summary'])) {
 			$this->warnings[] = $langs->trans('EInvoiceSummaryWarning');
 		}
-		if ($d['prepaid']) {
-			$this->warnings[] = $langs->trans('EInvoicePrepaid', price($d['prepaid']));
+		if ($d['prepaid'] && abs($d['prepaid'] - $appliedTtc) > 0.011) {
+			$this->warnings[] = $appliedRefs
+				? $langs->trans('EInvoicePrepaidDiffers', price($appliedTtc), price($d['prepaid']))
+				: $langs->trans('EInvoicePrepaid', price($d['prepaid']));
 		}
 
 		// Attach original (and the extracted XML of a PDF)
