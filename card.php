@@ -107,6 +107,9 @@ $row($langs->trans('Status'), EInvoiceInbox::statusBadge($doc->status));
 if ($doc->error_msg) {
 	$row($langs->trans('Error'), '<span class="error">'.dol_escape_htmltag($doc->error_msg).'</span>');
 }
+if ($doc->getDuplicateOf()) {
+	$row($langs->trans('EInvoiceDuplicateOf'), '<a href="'.$_SERVER['PHP_SELF'].'?id='.$doc->getDuplicateOf().'">#'.$doc->getDuplicateOf().'</a> <span class="opacitymedium small">'.$langs->trans('EInvoiceDuplicateOfHelp').'</span>');
+}
 $row($langs->trans('EInvoiceFormat'), dol_escape_htmltag($langs->trans('EInvoiceFormat_'.$doc->format)).($doc->profile ? '<br><span class="opacitymedium small">'.dol_escape_htmltag($doc->profile).'</span>' : ''));
 if ($doc->doc_type) {
 	$row($langs->trans('Type'), dol_escape_htmltag(EInvoiceInbox::docTypeLabel($doc->doc_type)).' <span class="opacitymedium">('.dol_escape_htmltag($doc->doc_type).')</span>');

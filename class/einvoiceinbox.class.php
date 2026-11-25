@@ -110,7 +110,7 @@ class EInvoiceInbox
 		$sql = "INSERT INTO ".MAIN_DB_PREFIX."einvoice_inbox (entity, source, fk_mail, mail_from, mail_subject, mail_date,";
 		$sql .= " filename, file_hash, file_path, xml_path, format, profile, doc_type, invoice_ref, invoice_date,";
 		$sql .= " seller_name, seller_vat, seller_taxnumber, buyer_name, buyer_reference, currency, total_ht, total_ttc, amount_due,";
-		$sql .= " status, error_msg, fk_soc, datec, fk_user_creat) VALUES (";
+		$sql .= " status, error_msg, fk_soc, note, datec, fk_user_creat) VALUES (";
 		$sql .= ((int) $conf->entity).", ".$this->q($this->source, 's', 16).", ".$this->q($this->fk_mail, 'i').", ";
 		$sql .= $this->q($this->mail_from).", ".$this->q($this->mail_subject).", ".$this->q($this->mail_date, 't').", ";
 		$sql .= $this->q($this->filename).", ".$this->q($this->file_hash, 's', 64).", ".$this->q($this->file_path).", ".$this->q($this->xml_path).", ";
@@ -119,7 +119,7 @@ class EInvoiceInbox
 		$sql .= $this->q($this->seller_name).", ".$this->q($this->seller_vat, 's', 64).", ".$this->q($this->seller_taxnumber, 's', 64).", ";
 		$sql .= $this->q($this->buyer_name).", ".$this->q($this->buyer_reference).", ".$this->q($this->currency, 's', 3).", ";
 		$sql .= $this->q($this->total_ht, 'f').", ".$this->q($this->total_ttc, 'f').", ".$this->q($this->amount_due, 'f').", ";
-		$sql .= ((int) $this->status).", ".$this->q($this->error_msg, 's', 65000).", ".$this->q($this->fk_soc, 'i').", ";
+		$sql .= ((int) $this->status).", ".$this->q($this->error_msg, 's', 65000).", ".$this->q($this->fk_soc, 'i').", ".$this->q($this->note, 's', 65000).", ";
 		$sql .= "'".$this->db->idate(dol_now())."', ".((int) $user->id).")";
 
 		if (!$this->db->query($sql)) {
@@ -302,6 +302,55 @@ class EInvoiceInbox
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Find an earlier inbox entry for the same invoice (same invoice number and
+	 * same seller VAT id, or same seller name when no VAT id is given).
+	 *
+	 * @return int|null Id of the earlier entry
+	 */
+	public function findSameInvoice()
+	{
+		global $conf;
+		if (empty($this->invoice_ref)) {
+			return null;
+		}
+		$sql = "SELECT rowid, seller_vat, seller_name, doc_type FROM ".MAIN_DB_PREFIX."einvoice_inbox";
+		$sql .= " WHERE entity = ".((int) $conf->entity)." AND invoice_ref = '".$this->db->escape($this->invoice_ref)."'";
+		$sql .= " ORDER BY rowid";
+		$res = $this->db->query($sql);
+		if (!$res) {
+			return null;
+		}
+		$norm = function ($s) {
+			return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $s));
+		};
+		while ($o = $this->db->fetch_object($res)) {
+			if ((string) $o->doc_type !== (string) $this->doc_type) {
+				continue; // invoice and credit note may share a number
+			}
+			if ($norm($this->seller_vat) !== '' && $norm($o->seller_vat) !== '') {
+				if ($norm($this->seller_vat) === $norm($o->seller_vat)) {
+					return (int) $o->rowid;
+				}
+				continue;
+			}
+			if (!empty($this->seller_name) && mb_strtolower(trim($o->seller_name)) === mb_strtolower(trim($this->seller_name))) {
+				return (int) $o->rowid;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Id of the entry this one duplicates, from the note.
+	 *
+	 * @return int
+	 */
+	public function getDuplicateOf()
+	{
+		return preg_match('/duplicate_of:(\d+)/', (string) $this->note, $m) ? (int) $m[1] : 0;
 	}
 
 	/**

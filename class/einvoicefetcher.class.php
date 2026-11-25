@@ -72,7 +72,11 @@ class EInvoiceFetcher
 	{
 		global $langs;
 		$langs->load('einvoice@einvoice');
-		return $langs->trans('EInvoiceFetchSummary', $this->stats['mails'], $this->stats['einvoices'], $this->stats['others'], $this->stats['duplicates'], $this->stats['errors']);
+		$s = $langs->trans('EInvoiceFetchSummary', $this->stats['mails'], $this->stats['einvoices'], $this->stats['others'], $this->stats['errors']);
+		if ($this->stats['duplicates']) {
+			$s .= ' '.$langs->trans('EInvoiceFetchDuplicates', $this->stats['duplicates']);
+		}
+		return $s;
 	}
 
 	/**
@@ -374,6 +378,12 @@ class EInvoiceFetcher
 		$doc->error_msg = $an['error'];
 		if ($doc->status !== EInvoiceInbox::STATUS_ERROR) {
 			$doc->fk_soc = $doc->findSupplier();
+		}
+		// Same invoice already received as another file (e.g. XML and ZUGFeRD PDF in one mail)?
+		$dupOf = $doc->findSameInvoice();
+		if ($dupOf) {
+			$doc->status = EInvoiceInbox::STATUS_IGNORED;
+			$doc->note = 'duplicate_of:'.$dupOf;
 		}
 
 		$id = $doc->create($user);
