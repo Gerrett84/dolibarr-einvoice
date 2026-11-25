@@ -1,0 +1,102 @@
+# E-Invoice module – English
+Module500220Name = E-Invoice
+Module500220Desc = Fetch e-invoices (XRechnung, ZUGFeRD/Factur-X) from a mailbox
+Permission500221 = View received e-invoices
+Permission500222 = Fetch, upload and manage e-invoices
+
+EInvoiceInbox = E-invoice inbox
+EInvoiceUpload = Upload
+EInvoiceSetup = E-invoice setup
+EInvoiceFetchCron = Fetch e-invoices from the mailbox
+EInvoiceFetchNow = Fetch now
+EInvoiceFetchFailed = Fetch failed
+EInvoiceFetchSummary = Fetch: %s new mails, %s e-invoices, %s other PDFs, %s duplicates, %s errors
+EInvoiceLastFetch = Last fetch
+EInvoiceNotConfigured = No mailbox has been set up yet.
+EInvoiceUploadHelp = XRechnung (XML) or ZUGFeRD/Factur-X (PDF with embedded XML). Several files allowed.
+EInvoiceUploaded = %s file(s) added
+EInvoiceNotRecognized = not recognised as an e-invoice
+EInvoiceDuplicate = already exists
+EInvoicePdfWithoutXml = PDF without e-invoice data (stored as "No e-invoice")
+
+EInvoiceFilterOpen = Open
+EInvoiceStatusNew = New
+EInvoiceStatusDone = Processed
+EInvoiceStatusNoEInvoice = No e-invoice
+EInvoiceStatusIgnored = Ignored
+EInvoiceStatusError = Error
+
+EInvoiceReceived = Received
+EInvoiceFormat = Format
+EInvoiceFormat_cii = XRechnung (CII)
+EInvoiceFormat_ubl = XRechnung (UBL)
+EInvoiceFormat_zugferd = ZUGFeRD / Factur-X
+EInvoiceFormat_pdf = PDF without e-invoice
+EInvoiceFormat_other = Other
+EInvoiceSupplierUnknown = Supplier not matched
+EInvoiceSource = Source
+EInvoiceSource_graph = Mailbox (Microsoft Graph)
+EInvoiceSource_imap = Mailbox (IMAP)
+EInvoiceSource_upload = Uploaded
+EInvoiceSourceUpload = uploaded
+
+EInvoiceDocument = E-invoice
+EInvoiceDocType380 = Invoice
+EInvoiceDocType381 = Credit note
+EInvoiceDocType384 = Corrected invoice
+EInvoiceDocType389 = Self-billed invoice
+EInvoiceDocType326 = Partial invoice
+EInvoiceDocType875 = Partial construction invoice
+EInvoiceDocType876 = Partial final construction invoice
+EInvoiceDocType877 = Final construction invoice
+EInvoiceSellerInDocument = Seller in document
+EInvoiceTaxNumber = Tax number
+EInvoiceBuyer = Buyer in document
+EInvoiceBuyerReference = Buyer reference / Leitweg-ID
+EInvoiceEmbeddedXml = Embedded invoice data (XML)
+EInvoiceShowXml = Show invoice data (XML)
+EInvoiceIgnore = Ignore
+EInvoiceConfirmDelete = Delete this entry and its stored file? The mail stays in the mailbox and will not be fetched again.
+
+EInvoiceTabConnection = Mailbox
+EInvoiceTabProcessing = Processing
+EInvoiceConnectionHelp = Where the e-invoices come from. Microsoft 365 needs an app registration in Entra ID (see note below).
+EInvoiceConnType = Connection type
+EInvoiceConnNone = – not set up –
+EInvoiceConnGraph = Microsoft 365 – Microsoft Graph (recommended)
+EInvoiceConnImapOauth = Microsoft 365 – IMAP with OAuth2
+EInvoiceConnImapPassword = IMAP with user name and password
+EInvoiceMailbox = Mailbox address
+EInvoiceTenantId = Directory (tenant) ID
+EInvoiceTenantIdHelp = GUID or domain, e.g. company.onmicrosoft.com
+EInvoiceClientId = Application (client) ID
+EInvoiceClientSecret = Client secret
+EInvoiceSecretStored = stored – leave empty to keep it
+EInvoiceSecretHelp = Stored encrypted and never shown again.
+EInvoiceImapHost = IMAP server
+EInvoiceImapPort = Port / encryption
+EInvoiceLoginDefault = empty = mailbox address
+EInvoiceSourceFolder = Mailbox folder
+EInvoiceSourceFolderHelp = Empty = inbox. Subfolders with "/", e.g. Inbox/Invoices
+EInvoiceTrashFolder = Trash folder
+EInvoiceAutoDetect = detect automatically
+EInvoiceTestConnection = Test connection
+EInvoiceTestOk = Connection OK. %s mail(s) with attachments found in the last 30 days.
+EInvoiceTestNothingChanged = The test only reads, nothing is changed in the mailbox.
+EInvoiceM365Help = <b>Microsoft 365 setup</b><br>1. Entra ID → App registrations → New registration (this directory only).<br>2. Certificates &amp; secrets → New client secret; note the value.<br>3a. <b>Graph:</b> restrict access to the invoice mailbox with Exchange Online PowerShell (RBAC for Applications, role "Application Mail.ReadWrite"). Do not grant a Graph permission in Entra, it would apply to all mailboxes.<br>3b. <b>IMAP:</b> API permission "Office 365 Exchange Online → IMAP.AccessAsApp" (application) + admin consent, then in Exchange Online <code>New-ServicePrincipal</code> and <code>Add-MailboxPermission -AccessRights FullAccess</code> for the invoice mailbox only.
+
+EInvoiceFetchSince = Fetch mails received since
+EInvoiceFetchSinceHelp = Older mails are never touched.
+EInvoiceMaxPerRun = Max. mails per run
+EInvoiceActionFound = Afterwards, mails <b>with</b> e-invoice
+EInvoiceActionNotFound = Afterwards, mails <b>without</b> e-invoice
+EInvoiceActionNone = leave unchanged
+EInvoiceActionRead = mark as read
+EInvoiceActionMove = move to folder
+EInvoiceActionTrash = move to trash
+EInvoiceTargetFolder = Folder
+EInvoiceKeepPlainPdf = Also keep PDFs without e-invoice
+EInvoiceKeepPlainPdfHelp = Stored as "No e-invoice", e.g. for manual entry later.
+EInvoiceParallelHint = If another program also reads this mailbox, choose "leave unchanged" for both. Dolibarr remembers processed mails itself and never fetches one twice.
+EInvoiceCronHint = Automatic fetch: enable the scheduled job "Fetch e-invoices from the mailbox" under <a href="%s">Scheduled jobs</a> (every 15 minutes by default).
+EInvoiceWatermark = Fully processed up to

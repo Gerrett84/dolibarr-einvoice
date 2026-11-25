@@ -1,0 +1,102 @@
+# E-Invoice module – Deutsch
+Module500220Name = E-Rechnung
+Module500220Desc = E-Rechnungen (XRechnung, ZUGFeRD/Factur-X) aus einem Postfach abrufen
+Permission500221 = Eingegangene E-Rechnungen ansehen
+Permission500222 = E-Rechnungen abrufen, hochladen und bearbeiten
+
+EInvoiceInbox = E-Rechnung Eingang
+EInvoiceUpload = Hochladen
+EInvoiceSetup = E-Rechnung Einstellungen
+EInvoiceFetchCron = E-Rechnungen aus dem Postfach abrufen
+EInvoiceFetchNow = Jetzt abrufen
+EInvoiceFetchFailed = Abruf fehlgeschlagen
+EInvoiceFetchSummary = Abruf: %s neue Mails, %s E-Rechnungen, %s andere PDFs, %s Duplikate, %s Fehler
+EInvoiceLastFetch = Letzter Abruf
+EInvoiceNotConfigured = Es ist noch kein Postfach eingerichtet.
+EInvoiceUploadHelp = XRechnung (XML) oder ZUGFeRD/Factur-X (PDF mit eingebetteter XML). Mehrere Dateien möglich.
+EInvoiceUploaded = %s Datei(en) übernommen
+EInvoiceNotRecognized = keine E-Rechnung erkannt
+EInvoiceDuplicate = bereits vorhanden
+EInvoicePdfWithoutXml = PDF ohne E-Rechnungs-Daten (als „Keine E-Rechnung“ abgelegt)
+
+EInvoiceFilterOpen = Offen
+EInvoiceStatusNew = Neu
+EInvoiceStatusDone = Übernommen
+EInvoiceStatusNoEInvoice = Keine E-Rechnung
+EInvoiceStatusIgnored = Ignoriert
+EInvoiceStatusError = Fehler
+
+EInvoiceReceived = Eingang
+EInvoiceFormat = Format
+EInvoiceFormat_cii = XRechnung (CII)
+EInvoiceFormat_ubl = XRechnung (UBL)
+EInvoiceFormat_zugferd = ZUGFeRD / Factur-X
+EInvoiceFormat_pdf = PDF ohne E-Rechnung
+EInvoiceFormat_other = Sonstiges
+EInvoiceSupplierUnknown = Lieferant nicht zugeordnet
+EInvoiceSource = Herkunft
+EInvoiceSource_graph = Postfach (Microsoft Graph)
+EInvoiceSource_imap = Postfach (IMAP)
+EInvoiceSource_upload = Hochgeladen
+EInvoiceSourceUpload = hochgeladen
+
+EInvoiceDocument = E-Rechnung
+EInvoiceDocType380 = Rechnung
+EInvoiceDocType381 = Gutschrift
+EInvoiceDocType384 = Rechnungskorrektur
+EInvoiceDocType389 = Gutschriftsverfahren
+EInvoiceDocType326 = Teilrechnung
+EInvoiceDocType875 = Abschlagsrechnung (Bau)
+EInvoiceDocType876 = Teilschlussrechnung (Bau)
+EInvoiceDocType877 = Schlussrechnung (Bau)
+EInvoiceSellerInDocument = Verkäufer laut Rechnung
+EInvoiceTaxNumber = Steuernummer
+EInvoiceBuyer = Käufer laut Rechnung
+EInvoiceBuyerReference = Käuferreferenz / Leitweg-ID
+EInvoiceEmbeddedXml = Eingebettete Rechnungsdaten (XML)
+EInvoiceShowXml = Rechnungsdaten (XML) anzeigen
+EInvoiceIgnore = Ignorieren
+EInvoiceConfirmDelete = Eintrag samt gespeicherter Datei löschen? Die Mail im Postfach bleibt unberührt und wird nicht erneut abgerufen.
+
+EInvoiceTabConnection = Postfach
+EInvoiceTabProcessing = Verarbeitung
+EInvoiceConnectionHelp = Woher die E-Rechnungen kommen. Für Microsoft 365 wird eine App-Registrierung in Entra ID benötigt (siehe Hinweis unten).
+EInvoiceConnType = Verbindungsart
+EInvoiceConnNone = – nicht eingerichtet –
+EInvoiceConnGraph = Microsoft 365 – Microsoft Graph (empfohlen)
+EInvoiceConnImapOauth = Microsoft 365 – IMAP mit OAuth2
+EInvoiceConnImapPassword = IMAP mit Benutzername und Passwort
+EInvoiceMailbox = Postfach-Adresse
+EInvoiceTenantId = Verzeichnis-ID (Tenant)
+EInvoiceTenantIdHelp = GUID oder Domäne, z. B. firma.onmicrosoft.com
+EInvoiceClientId = Anwendungs-ID (Client-ID)
+EInvoiceClientSecret = Geheimer Clientschlüssel
+EInvoiceSecretStored = gespeichert – leer lassen, um ihn zu behalten
+EInvoiceSecretHelp = Wird verschlüsselt gespeichert und nie wieder angezeigt.
+EInvoiceImapHost = IMAP-Server
+EInvoiceImapPort = Port / Verschlüsselung
+EInvoiceLoginDefault = leer = Postfach-Adresse
+EInvoiceSourceFolder = Ordner im Postfach
+EInvoiceSourceFolderHelp = Leer = Posteingang. Unterordner mit „/“, z. B. Inbox/Rechnungen
+EInvoiceTrashFolder = Papierkorb-Ordner
+EInvoiceAutoDetect = automatisch erkennen
+EInvoiceTestConnection = Verbindung testen
+EInvoiceTestOk = Verbindung in Ordnung. %s Mail(s) mit Anhang aus den letzten 30 Tagen gefunden.
+EInvoiceTestNothingChanged = Der Test liest nur, im Postfach wird nichts verändert.
+EInvoiceM365Help = <b>Microsoft 365 einrichten</b><br>1. Entra ID → App-Registrierungen → Neue Registrierung (nur dieses Verzeichnis).<br>2. Zertifikate &amp; Geheimnisse → Neuer geheimer Clientschlüssel; Wert notieren.<br>3a. <b>Graph:</b> Zugriff per Exchange-Online-PowerShell auf das Rechnungspostfach beschränken (RBAC für Anwendungen, Rolle „Application Mail.ReadWrite“). Keine Graph-Berechtigung in Entra vergeben, sonst gilt sie für alle Postfächer.<br>3b. <b>IMAP:</b> API-Berechtigung „Office 365 Exchange Online → IMAP.AccessAsApp“ (Anwendung) + Administratorzustimmung, dann in Exchange Online <code>New-ServicePrincipal</code> und <code>Add-MailboxPermission -AccessRights FullAccess</code> nur für das Rechnungspostfach.
+
+EInvoiceFetchSince = Mails abrufen ab
+EInvoiceFetchSinceHelp = Ältere Mails werden nie angefasst.
+EInvoiceMaxPerRun = Höchstens Mails pro Abruf
+EInvoiceActionFound = Danach mit Mails <b>mit</b> E-Rechnung
+EInvoiceActionNotFound = Danach mit Mails <b>ohne</b> E-Rechnung
+EInvoiceActionNone = nichts ändern
+EInvoiceActionRead = als gelesen markieren
+EInvoiceActionMove = in Ordner verschieben
+EInvoiceActionTrash = in den Papierkorb
+EInvoiceTargetFolder = Ordner
+EInvoiceKeepPlainPdf = Auch PDFs ohne E-Rechnung übernehmen
+EInvoiceKeepPlainPdfHelp = Werden als „Keine E-Rechnung“ abgelegt, z. B. zur späteren Erfassung von Hand.
+EInvoiceParallelHint = Ruft noch ein anderes Programm dieses Postfach ab (z. B. Taifun), bei beiden Einstellungen „nichts ändern“ wählen. Dolibarr merkt sich verarbeitete Mails selbst und holt keine doppelt.
+EInvoiceCronHint = Automatischer Abruf: geplanten Job „E-Rechnungen aus dem Postfach abrufen“ unter <a href="%s">Geplante Jobs</a> aktivieren (Standard alle 15 Minuten).
+EInvoiceWatermark = Vollständig verarbeitet bis
