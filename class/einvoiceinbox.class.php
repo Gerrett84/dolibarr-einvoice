@@ -266,6 +266,26 @@ class EInvoiceInbox
 	}
 
 	/**
+	 * Supporting documents inside the e-invoice (XML attachments, further files of a ZUGFeRD PDF).
+	 *
+	 * @param bool $withData Include the content
+	 * @return array{files:array<int,array<string,mixed>>,links:array<int,array<string,string>>}
+	 */
+	public function getAttachments($withData = false)
+	{
+		require_once __DIR__.'/einvoiceattachments.class.php';
+		$pdf = null;
+		if ($this->format === 'zugferd') {
+			$p = $this->getFullPath('file');
+			$pdf = $p ? file_get_contents($p) : null;
+			if ($pdf === false) {
+				$pdf = null;
+			}
+		}
+		return EInvoiceAttachments::read($this->getXml(), $pdf, $withData);
+	}
+
+	/**
 	 * Find the supplier by VAT id, then tax number, then exact name (only if unique).
 	 *
 	 * @return int|null Third party id
@@ -635,6 +655,18 @@ class EInvoiceInbox
 		$xmlSrc = $this->getFullPath('xml');
 		if ($xmlSrc && $xmlSrc !== $src) {
 			dol_copy($xmlSrc, $dir.'/'.dol_sanitizeFileName(pathinfo($this->filename, PATHINFO_FILENAME).'.xml'), '0', 1);
+		}
+		// Supporting documents from inside the e-invoice
+		$att = $this->getAttachments(true);
+		foreach ($att['files'] as $f) {
+			if ($f['error'] !== '' || $f['data'] === null) {
+				continue;
+			}
+			$target = $dir.'/'.dol_sanitizeFileName($f['name']);
+			if (!file_exists($target)) {
+				file_put_contents($target, $f['data']);
+				dolChmod($target);
+			}
 		}
 
 		$sql = "UPDATE ".MAIN_DB_PREFIX."einvoice_inbox SET fk_facture_fourn = ".((int) $fac->id).", status = ".self::STATUS_DONE.", fk_user_modif = ".((int) $user->id);

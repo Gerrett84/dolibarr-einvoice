@@ -107,7 +107,27 @@ class EInvoiceParser
 			return $out;
 		}
 
-		$candidates = array();
+		foreach (self::pdfEmbeddedStreams($pdf) as $s) {
+			$data = $s['data'];
+			if ($data !== null && preg_match('/^\s*(\xEF\xBB\xBF)?\s*</', substr($data, 0, 64))
+				&& (strpos($data, 'CrossIndustryInvoice') !== false || strpos($data, self::NS_UBL_INVOICE) !== false || strpos($data, self::NS_UBL_CREDITNOTE) !== false)) {
+				$out['xml'] = $data;
+				return $out;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * All embedded file streams of a PDF.
+	 *
+	 * @param string $pdf Raw PDF
+	 * @return array<int,array{obj:int,data:?string}> data null if it could not be decoded
+	 */
+	public static function pdfEmbeddedStreams($pdf)
+	{
+		$streams = array();
 		$offset = 0;
 		// Each embedded file is a stream object: << /Type /EmbeddedFile ... >> stream ... endstream
 		while (preg_match('/\/Type\s*\/EmbeddedFile(?![A-Za-z])/', $pdf, $m, PREG_OFFSET_CAPTURE, $offset)) {
@@ -115,16 +135,20 @@ class EInvoiceParser
 			$offset = $pos + 1;
 
 			// Start of the object dictionary: last "obj" before the match
-			$objStart = strrpos(substr($pdf, max(0, $pos - 4096), min($pos, 4096)), 'obj');
+			$winStart = max(0, $pos - 4096);
+			$before = substr($pdf, $winStart, $pos - $winStart);
+			$objStart = strrpos($before, 'obj');
 			if ($objStart === false) {
 				continue;
 			}
-			$objStart += max(0, $pos - 4096) + 3;
+			$objNum = preg_match('/(\d+)\s+\d+\s+$/', substr($before, max(0, $objStart - 24), min($objStart, 24)), $om) ? (int) $om[1] : 0;
+			$objStart += $winStart + 3;
 
-			$streamPos = strpos($pdf, 'stream', $pos);
-			if ($streamPos === false) {
+			// The "stream" keyword after the dictionary (not e.g. inside /Subtype /application#2Foctet-stream)
+			if (!preg_match('/>>\s*stream(?=\r?\n)/', $pdf, $sm, PREG_OFFSET_CAPTURE, $pos)) {
 				continue;
 			}
+			$streamPos = $sm[0][1] + strlen($sm[0][0]) - 6;
 			$dict = substr($pdf, $objStart, $streamPos - $objStart);
 			if (strpos($dict, 'endobj') !== false) {
 				continue; // not a stream object
@@ -140,7 +164,8 @@ class EInvoiceParser
 			$data = null;
 			if (preg_match('/\/Length\s+(\d+)(?!\s+\d+\s+R)/', $dict, $lm)) {
 				$len = (int) $lm[1];
-				if ($len > 0 && $dataStart + $len <= strlen($pdf)) {
+				// Trust /Length only if "endstream" follows; some producers write wrong lengths
+				if ($len > 0 && $dataStart + $len <= strlen($pdf) && preg_match('/^\s*endstream/', substr($pdf, $dataStart + $len, 16))) {
 					$data = substr($pdf, $dataStart, $len);
 				}
 			}
@@ -161,25 +186,54 @@ class EInvoiceParser
 					$decoded = @zlib_decode($data);
 				}
 				if ($decoded === false) {
-					continue;
+					$decoded = self::inflateTolerant($data);
 				}
-				$data = $decoded;
+				$data = $decoded === false ? null : $decoded;
 			} elseif (preg_match('/\/Filter/', $dict)) {
-				continue; // other filters are not used for XML attachments in practice
+				$data = null; // other filters are not used for attachments in practice
 			}
 
-			$candidates[] = $data;
+			$streams[] = array('obj' => $objNum, 'data' => $data);
 		}
+		return $streams;
+	}
 
-		foreach ($candidates as $data) {
-			if (preg_match('/^\s*(\xEF\xBB\xBF)?\s*</', substr($data, 0, 64))
-				&& (strpos($data, 'CrossIndustryInvoice') !== false || strpos($data, self::NS_UBL_INVOICE) !== false || strpos($data, self::NS_UBL_CREDITNOTE) !== false)) {
-				$out['xml'] = $data;
+	/**
+	 * Inflate a stream whose end is damaged (wrong /Length, missing checksum), as some PDF
+	 * producers write it. Stops at $max bytes of output (decompression bomb).
+	 *
+	 * @param string $data Compressed data
+	 * @param int    $max  Max. output size
+	 * @return string|false
+	 */
+	public static function inflateTolerant($data, $max = 52428800)
+	{
+		if (!function_exists('inflate_init')) {
+			return false;
+		}
+		foreach (array(ZLIB_ENCODING_DEFLATE, ZLIB_ENCODING_RAW) as $enc) {
+			$ctx = @inflate_init($enc);
+			if (!$ctx) {
+				continue;
+			}
+			$out = '';
+			$ok = true;
+			foreach (str_split($data, 65536) as $chunk) {
+				$part = @inflate_add($ctx, $chunk, ZLIB_SYNC_FLUSH);
+				if ($part === false) {
+					$ok = false;
+					break;
+				}
+				$out .= $part;
+				if (strlen($out) > $max || inflate_get_status($ctx) === ZLIB_STREAM_END) {
+					break;
+				}
+			}
+			if ($ok && $out !== '' && strlen($out) <= $max) {
 				return $out;
 			}
 		}
-
-		return $out;
+		return false;
 	}
 
 	/**

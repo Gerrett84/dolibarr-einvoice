@@ -36,6 +36,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once('/einvoice/class/einvoiceinbox.class.php');
 dol_include_once('/einvoice/class/einvoicedetails.class.php');
+dol_include_once('/einvoice/class/einvoicechecks.class.php');
 
 $langs->loadLangs(array("bills", "companies", "einvoice@einvoice"));
 
@@ -252,6 +253,23 @@ $files = '<a href="'.$dl.'&type=file">'.img_mime($doc->filename).' '.dol_escape_
 if ($doc->xml_path) {
 	$files .= '<br><a href="'.$dl.'&type=xml">'.img_mime('x.xml').' '.$langs->trans('EInvoiceEmbeddedXml').'</a>';
 }
+$attachments = $doc->getAttachments(false);
+foreach ($attachments['files'] as $n => $f) {
+	$label = dol_escape_htmltag($f['name']).' <span class="opacitymedium small">('.dol_print_size($f['size'], 1).')</span>';
+	$desc = trim($f['description'].($f['id'] !== '' && $f['id'] !== $f['description'] ? ' · '.$f['id'] : ''), ' ·');
+	if ($f['error'] === '') {
+		$files .= '<br><a href="'.$dl.'&type=att&n='.((int) $n).'"'.(in_array($f['type'], array('pdf', 'png', 'jpg'), true) ? ' target="_blank" rel="noopener"' : '').'>'.img_mime($f['name']).' '.$label.'</a>';
+	} else {
+		$files .= '<br>'.img_mime('x.bin').' <span class="opacitymedium">'.$label.' – '.$langs->trans('EInvoiceAttachmentError_'.$f['error']).'</span>';
+	}
+	if ($desc !== '') {
+		$files .= '<br><span class="opacitymedium small paddingleft">'.dol_escape_htmltag($desc).'</span>';
+	}
+}
+foreach ($attachments['links'] as $l) {
+	$files .= '<br><span class="fa fa-external-link-alt opacitymedium paddingright"></span>'.dol_escape_htmltag($l['description'] !== '' ? $l['description'] : $l['id']);
+	$files .= '<br><span class="small opacitymedium paddingleft">'.dol_escape_htmltag($l['uri']).' – '.$langs->trans('EInvoiceExternalRefHint').'</span>';
+}
 $row($langs->trans('Documents'), $files);
 $row('SHA-256', '<span class="small opacitymedium">'.dol_escape_htmltag($doc->file_hash).'</span>');
 print '</table>';
@@ -298,9 +316,30 @@ if ($canWrite && $action === 'createsupplier' && !$doc->fk_soc && $user->hasRigh
 
 // Readable invoice
 if ($details && $details['syntax'] && $action !== 'createsupplier') {
-	$problems = EInvoiceDetails::check($details);
-	if ($problems) {
-		print '<div class="warning">'.$langs->trans('EInvoiceArithmeticProblem').'<br>'.dol_escape_htmltag(implode(' · ', $problems)).'</div>';
+	$checks = EInvoiceChecks::run($db, $doc, $details, $mysoc, $langs);
+	$warn = array_filter($checks, function ($c) {
+		return $c['level'] === 'warning';
+	});
+	$info = array_filter($checks, function ($c) {
+		return $c['level'] !== 'warning';
+	});
+	print '<br>';
+	if (!$checks) {
+		print '<div class="opacitymedium"><span class="fa fa-check-circle" style="color:var(--colortextlinkok, #2c8f2c)"></span> '.$langs->trans('EInvoiceCheckOk').'</div>';
+	}
+	if ($warn) {
+		print '<div class="warning"><b>'.$langs->trans('EInvoiceCheckTitle').'</b><ul style="margin:4px 0 0 0">';
+		foreach ($warn as $c) {
+			print '<li>'.$c['text'].'</li>';
+		}
+		print '</ul></div>';
+	}
+	if ($info) {
+		print '<div class="info"><ul style="margin:0">';
+		foreach ($info as $c) {
+			print '<li>'.$c['text'].'</li>';
+		}
+		print '</ul></div>';
 	}
 	if (!empty($details['summary'])) {
 		print '<div class="warning">'.$langs->trans('EInvoiceSummaryHint').'</div>';

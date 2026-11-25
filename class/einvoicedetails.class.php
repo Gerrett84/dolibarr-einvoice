@@ -72,6 +72,7 @@ class EInvoiceDetails
 			'tax_total' => null, 'grand_total' => null, 'amount_due' => null,
 			'order_ref' => '', 'contract_ref' => '', 'billing_ref' => '', 'delivery_date' => '',
 			'period_start' => '', 'period_end' => '', 'notes' => array(), 'summary' => false,
+			'buyer_vat' => '', 'ibans' => array(), 'currency' => '',
 		);
 	}
 
@@ -160,6 +161,11 @@ class EInvoiceDetails
 		}
 
 		$res['payment_means'] = self::v($xp, $set.'/ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode');
+		foreach ($xp->query($set.'/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:IBANID') as $n) {
+			$res['ibans'][] = strtoupper(preg_replace('/\s+/', '', $n->textContent));
+		}
+		$res['buyer_vat'] = self::v($xp, $tx.'/ram:ApplicableHeaderTradeAgreement/ram:BuyerTradeParty/ram:SpecifiedTaxRegistration/ram:ID[@schemeID="VA"]');
+		$res['currency'] = self::v($xp, $set.'/ram:InvoiceCurrencyCode');
 		$res['payment_terms'] = self::v($xp, $set.'/ram:SpecifiedTradePaymentTerms/ram:Description');
 		$res['due_date'] = self::date(self::v($xp, $set.'/ram:SpecifiedTradePaymentTerms/ram:DueDateDateTime/udt:DateTimeString'));
 		$res['period_start'] = self::date(self::v($xp, $set.'/ram:BillingSpecifiedPeriod/ram:StartDateTime/udt:DateTimeString'));
@@ -246,6 +252,11 @@ class EInvoiceDetails
 		}
 
 		$res['payment_means'] = self::v($xp, 'cac:PaymentMeans/cbc:PaymentMeansCode', $root);
+		foreach ($xp->query('cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID', $root) as $n) {
+			$res['ibans'][] = strtoupper(preg_replace('/\s+/', '', $n->textContent));
+		}
+		$res['buyer_vat'] = self::v($xp, 'cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID="VAT"]/cbc:CompanyID', $root);
+		$res['currency'] = self::v($xp, 'cbc:DocumentCurrencyCode', $root);
 		$res['payment_terms'] = self::v($xp, 'cac:PaymentTerms/cbc:Note', $root);
 		$res['due_date'] = self::date(self::v($xp, 'cbc:DueDate', $root));
 		if ($res['due_date'] === '') {

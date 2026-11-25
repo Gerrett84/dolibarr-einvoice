@@ -48,7 +48,31 @@ if ($doc->fetch(GETPOSTINT('id')) <= 0) {
 	httponly_accessforbidden('Not found', 404);
 }
 
-$type = GETPOST('type', 'aZ09') === 'xml' ? 'xml' : 'file';
+$type = GETPOST('type', 'aZ09');
+if ($type === 'att') {
+	// Supporting document from inside the e-invoice
+	dol_include_once('/einvoice/class/einvoiceattachments.class.php');
+	$att = $doc->getAttachments(true);
+	$n = GETPOSTINT('n');
+	if (!isset($att['files'][$n]) || $att['files'][$n]['error'] !== '' || $att['files'][$n]['data'] === null) {
+		httponly_accessforbidden('File not found', 404);
+	}
+	$f = $att['files'][$n];
+	$mime = EInvoiceAttachments::TYPES[$f['type']][0];
+	$name = dol_sanitizeFileName($f['name']);
+	$inline = in_array($f['type'], array('pdf', 'png', 'jpg'), true);
+	top_httphead($mime);
+	header('Content-Disposition: '.($inline ? 'inline' : 'attachment').'; filename="'.str_replace('"', '', $name).'"; filename*=UTF-8\'\''.rawurlencode($name));
+	header('Content-Length: '.strlen($f['data']));
+	header('X-Content-Type-Options: nosniff');
+	if ($f['type'] !== 'pdf') {
+		header("Content-Security-Policy: default-src 'none'; img-src 'self'; sandbox");
+	}
+	print $f['data'];
+	$db->close();
+	exit;
+}
+$type = $type === 'xml' ? 'xml' : 'file';
 $path = $doc->getFullPath($type);
 if (!$path || !is_readable($path)) {
 	httponly_accessforbidden('File not found', 404);

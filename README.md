@@ -1,6 +1,6 @@
 # Dolibarr E-Rechnung (einvoice)
 
-**Version 0.2.0** | E-Rechnungen (XRechnung, ZUGFeRD/Factur-X) automatisch aus dem Postfach holen
+**Version 0.3.0** | E-Rechnungen (XRechnung, ZUGFeRD/Factur-X) automatisch aus dem Postfach holen
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -37,6 +37,8 @@ Getrennt für Mails **mit** und **ohne** E-Rechnung:
 ### Eingang
 - Liste mit Status: Offen, Übernommen, Keine E-Rechnung, Ignoriert, Fehler
 - Detailansicht mit Original-Datei, eingebetteter XML und XML-Ansicht
+- **Prüfhinweise**: Rechnung nicht an euch adressiert, Profil MINIMUM/BASIC WL, fehlende Rechnungsnummer/USt-ID/Steuernummer, ungültige IBAN, **abweichende Bankverbindung gegenüber dem Lieferanten** (Betrugsschutz), Rechenfehler
+- **Anhänge der E-Rechnung** (Stundennachweise, Aufmaße, Belege – in der XML oder als weitere Dateien im ZUGFeRD-PDF) werden angezeigt und an die Lieferantenrechnung gehängt. Nur PDF, PNG, JPG, CSV, XLSX, ODS; der Typ wird am Inhalt erkannt, externe Links werden nie automatisch geladen
 - Hochladen von Hand (mehrere Dateien)
 - Keine Dubletten: gleiche Datei (SHA-256) und gleiche Mail (Message-ID) werden nur einmal übernommen
 - Originaldateien werden unverändert im Dolibarr-Dokumentenverzeichnis abgelegt (`documents/einvoice/inbox/JJJJ/MM/…`)
@@ -83,7 +85,7 @@ Getrennt für Mails **mit** und **ohne** E-Rechnung:
 4. IMAP muss für das Postfach aktiviert sein
 
 ## Geplant
-- 0.2: Lieferantenrechnung (Entwurf) aus der E-Rechnung anlegen, lesbare Rechnungsansicht, Plausibilitätsprüfung der Summen
+- Anzahlungs- und Schlussrechnungen (Typ 386/875–877) mit Verrechnung der Anzahlungen
 - später: Ausgang – eigene Rechnungen als ZUGFeRD/XRechnung erzeugen
 
 ## Tests
@@ -93,6 +95,11 @@ php tests/fake_imap_server.php 10143 /tmp/imap.log & sleep 1; php tests/run_imap
 ```
 
 ## Changelog
+
+### v0.3.0
+- Prüfhinweise in der Detailansicht (Empfänger, Profil, Pflichtangaben, IBAN-Prüfziffer, geänderte Bankverbindung, Rechenfehler)
+- Anhänge aus XRechnung (BG-24) und ZUGFeRD-PDF: Anzeige, Download, Übernahme in die Lieferantenrechnung; Dubletten zwischen XML und PDF werden zusammengefasst
+- PDF-Lesen robuster: falsche `/Length`-Angaben, beschädigtes Stream-Ende, `/Subtype /application#2Foctet-stream`
 
 ### v0.2.0
 - Lieferantenrechnung (bzw. Gutschrift) als Entwurf aus der E-Rechnung erstellen: Positionen, Zu-/Abschläge, Fälligkeit, Zahlungsart, Original + XML als Anhang, Summenabgleich

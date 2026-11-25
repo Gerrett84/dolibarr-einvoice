@@ -146,5 +146,79 @@ $minimum = preg_replace('#<ram:ApplicableTradeTax>.*?</ram:ApplicableTradeTax>\s
 $d = EInvoiceDetails::read($minimum);
 check('minimum summary from totals', count($d['lines']).'|'.$d['lines'][0]['total'].'|'.$d['lines'][0]['vat_rate'], '1|100|19');
 
+// ---- Buyer VAT and IBANs
+$d = EInvoiceDetails::read(file_get_contents($fx.'cii-invoice.xml'));
+check('cii ibans', $d['ibans'], array('DE02120300000000202051'));
+$withBuyerVat = str_replace('<ram:BuyerTradeParty><ram:Name>Beispiel Automatiktüren GmbH</ram:Name></ram:BuyerTradeParty>', '<ram:BuyerTradeParty><ram:Name>Beispiel Automatiktüren GmbH</ram:Name><ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">DE 111 222 333</ram:ID></ram:SpecifiedTaxRegistration></ram:BuyerTradeParty>', file_get_contents($fx.'cii-invoice.xml'));
+check('cii buyer vat', EInvoiceDetails::read($withBuyerVat)['buyer_vat'], 'DE 111 222 333');
+$ublBuyer = str_replace('<cac:AccountingCustomerParty><cac:Party>', '<cac:AccountingCustomerParty><cac:Party><cac:PartyTaxScheme><cbc:CompanyID>DE111222333</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>', file_get_contents($fx.'ubl-creditnote.xml'));
+$d = EInvoiceDetails::read($ublBuyer);
+check('ubl buyer vat / iban', $d['buyer_vat'].'|'.implode(',', $d['ibans']), 'DE111222333|AT611904300234573201');
+
+// ---- Checks (static helpers)
+require_once __DIR__.'/../class/einvoicechecks.class.php';
+check('iban valid', EInvoiceChecks::ibanValid('DE02 1203 0000 0000 2020 51'), true);
+check('iban valid AT', EInvoiceChecks::ibanValid('AT611904300234573201'), true);
+check('iban bad check digit', EInvoiceChecks::ibanValid('DE03120300000000202051'), false);
+check('iban DE wrong length', EInvoiceChecks::ibanValid('DE0212030000000020205'), false);
+check('vat norm', EInvoiceChecks::normVat('de 123.456-789'), 'DE123456789');
+check('same name legal form', EInvoiceChecks::sameName('Beispiel Automatiktüren GmbH', 'BEISPIEL AUTOMATIKTUEREN'), true);
+check('same name with co kg', EInvoiceChecks::sameName('Kurina GmbH & Co. KG', 'Kurina GmbH'), true);
+check('different name', EInvoiceChecks::sameName('Kunde GmbH', 'Beispiel Automatiktüren GmbH'), false);
+
+// ---- Attachments
+require_once __DIR__.'/../class/einvoiceattachments.class.php';
+$png = "\x89PNG\r\n\x1A\n".str_repeat("\0", 32);
+$csv = "Datum;Stunden\n2026-11-20;3\n";
+$exe = "MZ\x90\0".str_repeat("\0", 60);
+$ciiAtt = str_replace('</ram:ApplicableHeaderTradeAgreement>',
+	'<ram:AdditionalReferencedDocument><ram:IssuerAssignedID>STD-1</ram:IssuerAssignedID><ram:TypeCode>916</ram:TypeCode><ram:Name>Stundennachweis</ram:Name>'
+	.'<ram:AttachmentBinaryObject mimeCode="text/csv" filename="../../stunden.csv">'.base64_encode($csv).'</ram:AttachmentBinaryObject></ram:AdditionalReferencedDocument>'
+	.'<ram:AdditionalReferencedDocument><ram:IssuerAssignedID>FOTO</ram:IssuerAssignedID><ram:TypeCode>916</ram:TypeCode>'
+	.'<ram:AttachmentBinaryObject mimeCode="application/pdf" filename="foto.pdf">'.chunk_split(base64_encode($png), 76, "\n").'</ram:AttachmentBinaryObject></ram:AdditionalReferencedDocument>'
+	.'<ram:AdditionalReferencedDocument><ram:IssuerAssignedID>X</ram:IssuerAssignedID><ram:TypeCode>916</ram:TypeCode>'
+	.'<ram:AttachmentBinaryObject mimeCode="application/pdf" filename="rechnung.pdf.exe">'.base64_encode($exe).'</ram:AttachmentBinaryObject></ram:AdditionalReferencedDocument>'
+	.'<ram:AdditionalReferencedDocument><ram:IssuerAssignedID>LS-7</ram:IssuerAssignedID><ram:URIID>https://portal.example/ls/7</ram:URIID><ram:TypeCode>916</ram:TypeCode><ram:Name>Lieferschein</ram:Name></ram:AdditionalReferencedDocument>'
+	.'</ram:ApplicableHeaderTradeAgreement>', file_get_contents($fx.'cii-invoice.xml'));
+$a = EInvoiceAttachments::read($ciiAtt, null, true);
+check('cii att count', count($a['files']).'|'.count($a['links']), '3|1');
+check('cii att csv (path stripped)', $a['files'][0]['name'].'|'.$a['files'][0]['type'].'|'.$a['files'][0]['description'].'|'.($a['files'][0]['data'] === $csv ? 'data' : 'nodata'), 'stunden.csv|csv|Stundennachweis|data');
+check('cii att type from content, not mime', $a['files'][1]['name'].'|'.$a['files'][1]['type'].'|'.$a['files'][1]['size'], 'foto.png|png|'.strlen($png));
+check('cii att exe refused', $a['files'][2]['error'].'|'.var_export($a['files'][2]['data'], true).'|'.$a['files'][2]['name'], 'unsupported|NULL|rechnung.pdf.bin');
+check('cii link', $a['links'][0]['uri'].'|'.$a['links'][0]['description'], 'https://portal.example/ls/7|Lieferschein');
+check('cii att still parses as invoice', EInvoiceDetails::read($ciiAtt)['grand_total'], 119.0);
+
+$ublAtt = str_replace('<cac:AccountingSupplierParty>',
+	'<cac:AdditionalDocumentReference><cbc:ID>A1</cbc:ID><cbc:DocumentDescription>Aufmaß</cbc:DocumentDescription><cac:Attachment><cbc:EmbeddedDocumentBinaryObject mimeCode="application/pdf" filename="aufmass.pdf">'.base64_encode("%PDF-1.4\n%%EOF").'</cbc:EmbeddedDocumentBinaryObject></cac:Attachment></cac:AdditionalDocumentReference>'
+	.'<cac:AdditionalDocumentReference><cbc:ID>A2</cbc:ID><cac:Attachment><cbc:EmbeddedDocumentBinaryObject mimeCode="application/pdf" filename="aufmass.pdf">'.base64_encode("%PDF-1.7\n%%EOF").'</cbc:EmbeddedDocumentBinaryObject></cac:Attachment></cac:AdditionalDocumentReference>'
+	.'<cac:AdditionalDocumentReference><cbc:ID>web</cbc:ID><cac:Attachment><cac:ExternalReference><cbc:URI>https://x.example/doc</cbc:URI></cac:ExternalReference></cac:Attachment></cac:AdditionalDocumentReference>'
+	.'<cac:AccountingSupplierParty>', file_get_contents($fx.'ubl-creditnote.xml'));
+$a = EInvoiceAttachments::read($ublAtt, null, false);
+check('ubl att names unique', $a['files'][0]['name'].'|'.$a['files'][1]['name'].'|'.$a['files'][0]['type'].'|'.$a['files'][0]['description'], 'aufmass.pdf|aufmass-2.pdf|pdf|Aufmaß');
+check('ubl att without data', array_key_exists('data', $a['files'][0]), false);
+check('ubl link', $a['links'][0]['uri'], 'https://x.example/doc');
+
+// PDF with invoice XML + an extra embedded PNG (compressed) + named via /UF (UTF-16)
+$xmlInv = file_get_contents($fx.'cii-invoice.xml');
+$pngz = gzcompress($png);
+$ufName = '<FEFF'.strtoupper(bin2hex(mb_convert_encoding('Übersicht.png', 'UTF-16BE', 'UTF-8'))).'>';
+$pdf = "%PDF-1.7\n"
+	."5 0 obj\n<< /Type /Filespec /F (factur-x.xml) /UF (factur-x.xml) /EF << /F 6 0 R /UF 6 0 R >> /AFRelationship /Data >>\nendobj\n"
+	."6 0 obj\n<< /Type /EmbeddedFile /Subtype /text#2Fxml /Length ".strlen($xmlInv)." >>\nstream\n".$xmlInv."\nendstream\nendobj\n"
+	."7 0 obj\n<< /Type /Filespec /F (scan.png) /UF ".$ufName." /EF << /F 8 0 R >> >>\nendobj\n"
+	."8 0 obj\n<< /Type /EmbeddedFile /Subtype /image#2Fpng /Filter /FlateDecode /Length ".strlen($pngz)." >>\nstream\n".$pngz."\nendstream\nendobj\n"
+	."%%EOF\n";
+check('pdf xml still found', EInvoiceParser::extractXmlFromPdf($pdf)['xml'] === $xmlInv, true);
+$a = EInvoiceAttachments::read(null, $pdf, true);
+check('pdf extra file', count($a['files']).'|'.$a['files'][0]['name'].'|'.$a['files'][0]['type'].'|'.($a['files'][0]['data'] === $png ? 'data' : 'nodata'), '1|Übersicht.png|png|data');
+$pdfBadLen = str_replace('/Length '.strlen($pngz).' ', '/Length '.(strlen($pngz) - 5).' ', $pdf);
+check('pdf wrong /Length tolerated', EInvoiceAttachments::read(null, $pdfBadLen, true)['files'][0]['data'] === $png, true);
+$empty = str_replace(base64_encode($csv), '', $ciiAtt);
+check('empty attachment', EInvoiceAttachments::read($empty)['files'][0]['error'], 'empty');
+check('internal #ef reference hidden', count(EInvoiceAttachments::read(str_replace('https://portal.example/ls/7', '#ef=foto.png', $ciiAtt))['links']), 0);
+$pdfOctet = str_replace('/Subtype /image#2Fpng', '/Subtype /application#2Foctet-stream', $pdf);
+check('pdf subtype octet-stream', EInvoiceAttachments::read(null, $pdfOctet, true)['files'][0]['data'] === $png, true);
+check('real zugferd fixture: no extra files', count(EInvoiceAttachments::read(null, file_get_contents($fx.'zugferd.pdf'))['files']), 0);
+
 echo "\n".($n - $fail)."/$n passed\n";
 exit($fail ? 1 : 0);
