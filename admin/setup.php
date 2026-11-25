@@ -114,6 +114,9 @@ if ($action === 'save_processing') {
 		$minutes = 15;
 	}
 	EInvoiceFetcher::setCronJob($db, GETPOSTINT('EINVOICE_AUTO') === 1, $minutes);
+	// Also kept as constants, so the setting survives disabling/enabling the module
+	dolibarr_set_const($db, 'EINVOICE_AUTO', GETPOSTINT('EINVOICE_AUTO') === 1 ? '1' : '0', 'chaine', 0, '', $conf->entity);
+	dolibarr_set_const($db, 'EINVOICE_AUTO_MINUTES', (string) $minutes, 'chaine', 0, '', $conf->entity);
 	dolibarr_set_const($db, 'EINVOICE_MAX_PER_RUN', max(1, min(500, GETPOSTINT('EINVOICE_MAX_PER_RUN'))), 'chaine', 0, '', $conf->entity);
 	foreach (array('EINVOICE_ACTION_FOUND', 'EINVOICE_ACTION_NOTFOUND') as $k) {
 		$v = GETPOST($k, 'aZ09');

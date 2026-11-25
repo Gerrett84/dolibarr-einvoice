@@ -132,22 +132,7 @@ class modEInvoice extends DolibarrModules
 			'target' => '',
 			'user' => 0,
 		);
-
-		$r++;
-		$this->menu[$r] = array(
-			'fk_menu' => 'fk_mainmenu=billing,fk_leftmenu=einvoice',
-			'type' => 'left',
-			'titre' => 'Setup',
-			'mainmenu' => 'billing',
-			'leftmenu' => 'einvoice_setup',
-			'url' => '/einvoice/admin/setup.php?mainmenu=billing&leftmenu=einvoice',
-			'langs' => 'admin',
-			'position' => 1302,
-			'enabled' => 'isModEnabled("einvoice")',
-			'perms' => '$user->admin',
-			'target' => '',
-			'user' => 0,
-		);
+		// Setup is reached via Home > Setup > Modules (config_page_url), not from the left menu
 	}
 
 	/**
@@ -164,7 +149,18 @@ class modEInvoice extends DolibarrModules
 		}
 
 		$sql = array();
-		return $this->_init($sql, $options);
+		$res = $this->_init($sql, $options);
+
+		// The scheduled job survives disabling the module: bring its comment up to date
+		if ($res > 0) {
+			$this->db->query("UPDATE ".MAIN_DB_PREFIX."cronjob SET note = 'EInvoiceFetchCronComment' WHERE module_name = 'einvoice' AND methodename = 'cronFetch'");
+		}
+		// If the job was recreated, restore the automatic fetch setting
+		if ($res > 0 && getDolGlobalString('EINVOICE_AUTO') !== '') {
+			dol_include_once('/einvoice/class/einvoicefetcher.class.php');
+			EInvoiceFetcher::setCronJob($this->db, getDolGlobalInt('EINVOICE_AUTO') === 1, getDolGlobalInt('EINVOICE_AUTO_MINUTES', 15));
+		}
+		return $res;
 	}
 
 	/**
@@ -175,6 +171,15 @@ class modEInvoice extends DolibarrModules
 	 */
 	public function remove($options = '')
 	{
+		// Remember the automatic fetch setting, the scheduled job is deleted with the module
+		dol_include_once('/einvoice/class/einvoicefetcher.class.php');
+		$job = EInvoiceFetcher::getCronJob($this->db);
+		if ($job) {
+			require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+			global $conf;
+			dolibarr_set_const($this->db, 'EINVOICE_AUTO', (int) $job->status === 1 ? '1' : '0', 'chaine', 0, '', $conf->entity);
+			dolibarr_set_const($this->db, 'EINVOICE_AUTO_MINUTES', (string) max(1, (int) round($job->frequency * $job->unitfrequency / 60)), 'chaine', 0, '', $conf->entity);
+		}
 		$sql = array();
 		return $this->_remove($sql, $options);
 	}

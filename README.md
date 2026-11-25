@@ -116,11 +116,12 @@ Noch nicht automatisch übernommen werden Rechnungen in **Fremdwährung** (Hinwe
 1. ZIP aus den [Releases](https://github.com/Gerrett84/dolibarr-einvoice/releases) über *Einstellungen → Module → Externes Modul hochladen* installieren (oder den Ordner nach `htdocs/custom/einvoice` kopieren)
 2. Modul **E-Rechnung** aktivieren
 3. Rechte vergeben: „Eingegangene E-Rechnungen ansehen“ und „E-Rechnungen abrufen, hochladen und bearbeiten“. Zum Übernehmen braucht der Benutzer außerdem das Recht, Lieferantenrechnungen anzulegen (für *Lieferant anlegen*: Geschäftspartner anlegen)
-4. *E-Rechnung → Einstellungen → Postfach*: Verbindung einrichten und **Verbindung testen** (liest nur, ändert nichts)
-5. *Einstellungen → Verarbeitung*: Abrufdatum, Verhalten nach dem Abruf und **Automatischer Abruf** festlegen
+4. Einstellungen öffnen: *Start → Einstellungen → Module*, beim Modul **E-Rechnung** auf das Zahnrad klicken (nur für Administratoren). Reiter *Postfach*: Verbindung einrichten und **Verbindung testen** (liest nur, ändert nichts)
+5. Reiter *Verarbeitung*: Abrufdatum, Verhalten nach dem Abruf und **Automatischer Abruf** festlegen
 6. Für den automatischen Abruf muss der Dolibarr-Zeitplaner auf dem Server laufen, siehe [Automatischer Abruf](#automatischer-abruf-cron)
 
 ## Einstellungen
+Erreichbar über *Start → Einstellungen → Module → E-Rechnung* (Zahnrad), nicht über das Seitenmenü.
 
 **Reiter „Postfach“**
 - Verbindungsart: Microsoft Graph, IMAP mit OAuth2 oder IMAP mit Passwort
@@ -212,6 +213,7 @@ Die Tests brauchen kein Dolibarr. Der Ordner `tests/` ist nicht im Release-ZIP e
 - **Anhänge** aus XRechnung und ZUGFeRD-PDF: Anzeige, Download, Übernahme in die Lieferantenrechnung; Dubletten zwischen XML und PDF werden zusammengefasst
 - **Anzahlungen:** Vorauszahlungs- und Abschlagsrechnungen (Typ 386, 875) werden als Anzahlungsrechnung angelegt; bei Schlussrechnungen werden offene Anzahlungen zur Verrechnung angeboten und passende vorausgewählt
 - PDF-Lesen robuster: falsche `/Length`-Angaben, beschädigtes Stream-Ende, `/Subtype /application#2Foctet-stream`
+- Einstellungen nur noch über die Modulverwaltung (Zahnrad), nicht mehr im Seitenmenü; der automatische Abruf bleibt beim Aus- und Einschalten des Moduls erhalten
 - Alle Meldungen übersetzt (auch Fehler von IMAP, Microsoft und beim Lesen der XML); die Meldung des automatischen Abrufs erscheint in der Sprache des Betrachters
 
 ### v0.2.0
