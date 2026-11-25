@@ -66,6 +66,60 @@ class EInvoiceFetcher
 	}
 
 	/**
+	 * The scheduled job of this module.
+	 *
+	 * @param DoliDB $db Database handler
+	 * @return object|null rowid, status, frequency, unitfrequency, datenextrun, datelastrun
+	 */
+	public static function getCronJob($db)
+	{
+		global $conf;
+		$sql = "SELECT rowid, status, frequency, unitfrequency, datenextrun, datelastrun FROM ".MAIN_DB_PREFIX."cronjob";
+		$sql .= " WHERE classesname LIKE '%einvoicefetcher.class.php' AND methodename = 'cronFetch'";
+		$sql .= " AND entity IN (0, ".((int) $conf->entity).") ORDER BY entity DESC";
+		$res = $db->query($sql);
+		$obj = $res ? $db->fetch_object($res) : null;
+		return $obj ? $obj : null;
+	}
+
+	/**
+	 * Switch the scheduled job on/off and set its interval.
+	 *
+	 * @param DoliDB $db      Database handler
+	 * @param bool   $enabled On/off
+	 * @param int    $minutes Interval in minutes
+	 * @return int <0 if KO
+	 */
+	public static function setCronJob($db, $enabled, $minutes)
+	{
+		$job = self::getCronJob($db);
+		if (!$job) {
+			return -1;
+		}
+		$sql = "UPDATE ".MAIN_DB_PREFIX."cronjob SET status = ".($enabled ? 1 : 0).", frequency = ".max(1, (int) $minutes).", unitfrequency = 60";
+		if ($enabled && (int) $job->status !== 1) {
+			$sql .= ", datenextrun = '".$db->idate(dol_now())."'";
+		}
+		$sql .= " WHERE rowid = ".((int) $job->rowid);
+		return $db->query($sql) ? 1 : -1;
+	}
+
+	/**
+	 * Did any scheduled job run recently? False means the system scheduler is probably not set up.
+	 *
+	 * @param DoliDB $db Database handler
+	 * @return bool
+	 */
+	public static function schedulerSeemsActive($db)
+	{
+		$sql = "SELECT MAX(datelastrun) as last FROM ".MAIN_DB_PREFIX."cronjob WHERE status = 1";
+		$res = $db->query($sql);
+		$obj = $res ? $db->fetch_object($res) : null;
+		$last = $obj ? $db->jdate($obj->last) : 0;
+		return $last && $last > dol_now() - 2 * 3600;
+	}
+
+	/**
 	 * Human readable summary of the last run.
 	 *
 	 * @return string

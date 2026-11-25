@@ -30,6 +30,7 @@ if (!$res) {
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 dol_include_once('/einvoice/class/einvoiceconnector.class.php');
+dol_include_once('/einvoice/class/einvoicefetcher.class.php');
 
 if (!$user->admin) {
 	accessforbidden();
@@ -108,6 +109,11 @@ if ($action === 'save_processing') {
 			dolibarr_del_const($db, 'EINVOICE_WATERMARK', $conf->entity);
 		}
 	}
+	$minutes = GETPOSTINT('EINVOICE_AUTO_MINUTES');
+	if (!in_array($minutes, array(5, 10, 15, 30, 60), true)) {
+		$minutes = 15;
+	}
+	EInvoiceFetcher::setCronJob($db, GETPOSTINT('EINVOICE_AUTO') === 1, $minutes);
 	dolibarr_set_const($db, 'EINVOICE_MAX_PER_RUN', max(1, min(500, GETPOSTINT('EINVOICE_MAX_PER_RUN'))), 'chaine', 0, '', $conf->entity);
 	foreach (array('EINVOICE_ACTION_FOUND', 'EINVOICE_ACTION_NOTFOUND') as $k) {
 		$v = GETPOST($k, 'aZ09');
@@ -239,6 +245,24 @@ if ($tab === 'connection') {
 	print $form->selectDate($since ? $since : dol_now(), 'since', 0, 0, 0, '', 1, 0);
 	print '</td></tr>';
 
+	$job = EInvoiceFetcher::getCronJob($db);
+	$jobOn = $job && (int) $job->status === 1;
+	$jobMin = $job ? max(1, (int) round($job->frequency * $job->unitfrequency / 60)) : 15;
+	print '<tr class="oddeven"><td>'.$langs->trans('EInvoiceAutoFetch').'</td><td>';
+	print '<input type="checkbox" id="EINVOICE_AUTO" name="EINVOICE_AUTO" value="1"'.($jobOn ? ' checked' : '').($job ? '' : ' disabled').'> ';
+	print '<label for="EINVOICE_AUTO">'.$langs->trans('EInvoiceAutoFetchEvery').'</label> ';
+	$opts = array();
+	foreach (array(5, 10, 15, 30, 60) as $m) {
+		$opts[$m] = $langs->trans('EInvoiceMinutes', $m);
+	}
+	print $form->selectarray('EINVOICE_AUTO_MINUTES', $opts, in_array($jobMin, array(5, 10, 15, 30, 60), true) ? $jobMin : 15, 0, 0, 0, '', 0, 0, $job ? 0 : 1);
+	if (!$job) {
+		print ' <span class="error">'.$langs->trans('EInvoiceCronJobMissing').'</span>';
+	} elseif ($jobOn && !EInvoiceFetcher::schedulerSeemsActive($db)) {
+		print '<br><span class="warning">'.$langs->trans('EInvoiceSchedulerMissing', DOL_URL_ROOT.'/cron/admin/cron.php').'</span>';
+	}
+	print '</td></tr>';
+
 	print '<tr class="oddeven"><td>'.$langs->trans('EInvoiceMaxPerRun').'</td><td><input type="number" class="width75" min="1" max="500" name="EINVOICE_MAX_PER_RUN" value="'.getDolGlobalInt('EINVOICE_MAX_PER_RUN', 50).'"></td></tr>';
 
 	foreach (array('FOUND' => array('EInvoiceActionFound', 'E-Rechnung/Verarbeitet'), 'NOTFOUND' => array('EInvoiceActionNotFound', 'E-Rechnung/Keine E-Rechnung')) as $k => $def) {
@@ -267,7 +291,6 @@ if ($tab === 'connection') {
 	</script>';
 
 	print '<br>'.info_admin($langs->trans('EInvoiceParallelHint'));
-	print '<br>'.info_admin($langs->trans('EInvoiceCronHint', DOL_URL_ROOT.'/cron/list.php'));
 	$wm = getDolGlobalInt('EINVOICE_WATERMARK');
 	if ($wm) {
 		print '<br><span class="opacitymedium small">'.$langs->trans('EInvoiceWatermark').': '.dol_print_date($wm, 'dayhour', 'tzuserrel').'</span>';

@@ -73,6 +73,22 @@ if ($canWrite) {
 		header('Location: '.$self);
 		exit;
 	}
+	if ($action === 'addsupplier' && !$doc->fk_soc && $user->hasRight('societe', 'creer')) {
+		$d = array();
+		foreach (array('name', 'vat', 'taxnumber', 'address', 'zip', 'town', 'country', 'email', 'phone', 'iban', 'bic') as $k) {
+			$d[$k] = GETPOST('s_'.$k, $k === 'address' ? 'restricthtml' : 'alphanohtml');
+		}
+		$d['iban'] = strtoupper(preg_replace('/\s+/', '', $d['iban']));
+		$socid = $doc->createSupplier($d, $user);
+		if ($socid > 0) {
+			$n = EInvoiceInbox::relinkUnmatched($db, $user);
+			setEventMessages($langs->trans('EInvoiceSupplierCreated').($n ? ' '.$langs->trans('EInvoiceSupplierRelinked', $n) : ''), null, 'mesgs');
+			header('Location: '.$self);
+			exit;
+		}
+		setEventMessages($doc->error, null, 'errors');
+		$action = 'createsupplier';
+	}
 	if ($action === 'confirm_delete' && $confirm === 'yes') {
 		if ($doc->delete($user) > 0) {
 			setEventMessages($langs->trans('RecordDeleted'), null, 'mesgs');
@@ -134,6 +150,9 @@ if ($canWrite && $action === 'editsupplier') {
 } elseif ($canWrite) {
 	$supplierHtml .= ' <a class="editfielda" href="'.$self.'&action=editsupplier&token='.newToken().'">'.img_edit($langs->trans('Edit')).'</a>';
 }
+if ($canWrite && !$doc->fk_soc && $action !== 'editsupplier' && $action !== 'createsupplier' && $user->hasRight('societe', 'creer') && $doc->seller_name) {
+	$supplierHtml .= '<br><a class="butAction smallpaddingimp" style="margin:4px 0 0 0" href="'.$self.'&action=createsupplier&token='.newToken().'"><span class="fa fa-plus-circle paddingright"></span>'.$langs->trans('EInvoiceCreateSupplier').'</a>';
+}
 $row($langs->trans('Supplier'), $supplierHtml);
 $row($langs->trans('EInvoiceSellerInDocument'), dol_escape_htmltag($doc->seller_name)
 	.($doc->seller_vat ? '<br><span class="opacitymedium small">'.$langs->trans('VATIntra').': '.dol_escape_htmltag($doc->seller_vat).'</span>' : '')
@@ -172,6 +191,44 @@ $row('SHA-256', '<span class="small opacitymedium">'.dol_escape_htmltag($doc->fi
 print '</table>';
 print '</div></div>';
 print '<div class="clearboth"></div>';
+
+// Create supplier from invoice data
+if ($canWrite && $action === 'createsupplier' && !$doc->fk_soc && $user->hasRight('societe', 'creer')) {
+	$d = $doc->getSellerDetails();
+	if (GETPOSTISSET('s_name')) {
+		foreach (array_keys($d) as $k) {
+			$d[$k] = GETPOST('s_'.$k, 'alphanohtml');
+		}
+	}
+	print '<br><form method="POST" action="'.$self.'">';
+	print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="action" value="addsupplier">';
+	print '<table class="noborder centpercent"><tr class="liste_titre"><td colspan="2">'.$langs->trans('EInvoiceCreateSupplier').' <span class="opacitymedium small">– '.$langs->trans('EInvoiceCreateSupplierHelp').'</span></td></tr>';
+	$fields = array(
+		'name' => array('ThirdPartyName', 'minwidth300', 1),
+		'address' => array('Address', 'minwidth300', 0),
+		'zip' => array('Zip', 'width100', 0),
+		'town' => array('Town', 'minwidth200', 0),
+		'country' => array('CountryCode', 'width50', 0),
+		'vat' => array('VATIntra', 'minwidth200', 0),
+		'taxnumber' => array('EInvoiceTaxNumber', 'minwidth200', 0),
+		'email' => array('Email', 'minwidth300', 0),
+		'phone' => array('Phone', 'minwidth200', 0),
+		'iban' => array('IBAN', 'minwidth300', 0),
+		'bic' => array('BIC', 'minwidth100', 0),
+	);
+	foreach ($fields as $k => $f) {
+		print '<tr class="oddeven"><td class="titlefieldcreate'.($f[2] ? ' fieldrequired' : '').'">'.$langs->trans($f[0]).'</td><td>';
+		if ($k === 'address') {
+			print '<textarea name="s_address" class="'.$f[1].'" rows="2">'.dol_escape_htmltag($d[$k]).'</textarea>';
+		} else {
+			print '<input type="text" name="s_'.$k.'" class="'.$f[1].'" value="'.dol_escape_htmltag($d[$k]).'"'.($f[2] ? ' required' : '').'>';
+		}
+		print '</td></tr>';
+	}
+	print '</table>';
+	print '<div class="center margintoponly"><input type="submit" class="button button-save" value="'.$langs->trans('EInvoiceCreateSupplier').'"> <a class="button button-cancel" href="'.$self.'">'.$langs->trans('Cancel').'</a></div>';
+	print '</form>';
+}
 
 // Buttons
 print '<div class="tabsAction">';

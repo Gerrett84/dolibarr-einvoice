@@ -111,3 +111,11 @@ EInvoiceKeepPlainPdfHelp = Werden als „Keine E-Rechnung“ abgelegt, z. B. zur
 EInvoiceParallelHint = Ruft noch ein anderes Programm dieses Postfach ab (z. B. Taifun), bei beiden Einstellungen „nichts ändern“ wählen. Dolibarr merkt sich verarbeitete Mails selbst und holt keine doppelt.
 EInvoiceCronHint = Automatischer Abruf: geplanten Job „E-Rechnungen aus dem Postfach abrufen“ unter <a href="%s">Geplante Jobs</a> aktivieren (Standard alle 15 Minuten).
 EInvoiceWatermark = Vollständig verarbeitet bis
+EInvoiceAutoFetchEvery = alle
+EInvoiceMinutes = %s Minuten
+EInvoiceCronJobMissing = Geplanter Job fehlt – Modul einmal deaktivieren und wieder aktivieren.
+EInvoiceSchedulerMissing = Auf diesem Server ist in den letzten 2 Stunden kein geplanter Job gelaufen. Der Dolibarr-Zeitplaner muss einmal im System eingerichtet werden, siehe <a href="%s">Geplante Jobs → Einstellungen</a>.
+EInvoiceCreateSupplier = Lieferant anlegen
+EInvoiceCreateSupplierHelp = Daten aus der E-Rechnung, vor dem Speichern änderbar
+EInvoiceSupplierCreated = Lieferant angelegt und zugeordnet.
+EInvoiceSupplierRelinked = %s weitere Einträge ebenfalls zugeordnet.

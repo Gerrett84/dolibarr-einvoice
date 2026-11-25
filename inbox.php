@@ -193,16 +193,8 @@ if (getDolGlobalString('EINVOICE_CONN_TYPE')) {
 	print '</div>';
 
 	// Scheduled job
-	$cron = null;
-	$sqlc = "SELECT rowid, status, frequency, unitfrequency, datenextrun FROM ".MAIN_DB_PREFIX."cronjob";
-	$sqlc .= " WHERE classesname LIKE '%einvoicefetcher.class.php' AND methodename = 'cronFetch'";
-	$sqlc .= " AND entity IN (0, ".((int) $conf->entity).") ORDER BY entity DESC";
-	$resc2 = $db->query($sqlc);
-	if ($resc2) {
-		$cron = $db->fetch_object($resc2);
-	}
+	$cron = EInvoiceFetcher::getCronJob($db);
 	print '<div>'.$langs->trans('EInvoiceAutoFetch').': ';
-	$cronLink = $cron ? DOL_URL_ROOT.'/cron/card.php?id='.((int) $cron->rowid) : DOL_URL_ROOT.'/cron/list.php';
 	if ($cron && (int) $cron->status === 1) {
 		$minutes = max(1, (int) round($cron->frequency * $cron->unitfrequency / 60));
 		$next = $db->jdate($cron->datenextrun);
@@ -215,8 +207,8 @@ if (getDolGlobalString('EINVOICE_CONN_TYPE')) {
 		}
 	} else {
 		print '<b>'.$langs->trans('EInvoiceAutoFetchOff').'</b>';
-		if ($user->hasRight('cron', 'create') || $user->admin) {
-			print ' – <a href="'.$cronLink.'">'.$langs->trans('EInvoiceAutoFetchEnable').'</a>';
+		if ($user->admin) {
+			print ' – <a href="'.dol_buildpath('/einvoice/admin/setup.php', 1).'?tab=processing">'.$langs->trans('EInvoiceAutoFetchEnable').'</a>';
 		}
 	}
 	print '</div>';

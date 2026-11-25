@@ -305,6 +305,123 @@ class EInvoiceInbox
 	}
 
 	/**
+	 * Seller details read again from the stored XML (address, contact, bank account).
+	 *
+	 * @return array<string,string>
+	 */
+	public function getSellerDetails()
+	{
+		$d = array('name' => (string) $this->seller_name, 'vat' => (string) $this->seller_vat, 'taxnumber' => (string) $this->seller_taxnumber,
+			'address' => '', 'zip' => '', 'town' => '', 'country' => '', 'email' => '', 'phone' => '', 'iban' => '', 'bic' => '');
+		$xml = $this->getXml();
+		if ($xml !== null) {
+			dol_include_once('/einvoice/class/einvoiceparser.class.php');
+			$p = EInvoiceParser::parseXml($xml);
+			foreach (array('address', 'zip', 'town', 'country', 'email', 'phone', 'iban', 'bic') as $k) {
+				if (!empty($p['data']['seller_'.$k])) {
+					$d[$k] = (string) $p['data']['seller_'.$k];
+				}
+			}
+		}
+		$d['iban'] = strtoupper(preg_replace('/\s+/', '', $d['iban']));
+		return $d;
+	}
+
+	/**
+	 * Create a new supplier (third party) and link this entry to it.
+	 *
+	 * @param array<string,string> $d    Data (keys as in getSellerDetails())
+	 * @param User                 $user User
+	 * @return int Id of the new third party, <0 if KO
+	 */
+	public function createSupplier($d, $user)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/companybankaccount.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
+
+		if (trim($d['name']) === '') {
+			$this->error = 'Name missing';
+			return -1;
+		}
+		$this->db->begin();
+		$soc = new Societe($this->db);
+		$soc->name = trim($d['name']);
+		$soc->client = 0;
+		$soc->fournisseur = 1;
+		$soc->code_fournisseur = -1; // automatic code if the numbering module supports it
+		$soc->status = 1;
+		$soc->address = trim($d['address']);
+		$soc->zip = trim($d['zip']);
+		$soc->town = trim($d['town']);
+		if (!empty($d['country'])) {
+			$soc->country_id = (int) dol_getIdFromCode($this->db, strtoupper(trim($d['country'])), 'c_country', 'code', 'rowid');
+			$soc->country_code = strtoupper(trim($d['country']));
+		}
+		$soc->email = trim($d['email']);
+		$soc->phone = trim($d['phone']);
+		$soc->tva_intra = trim($d['vat']);
+		$soc->tva_assuj = 1;
+		$soc->idprof1 = trim($d['taxnumber']); // DE: Steuernummer
+		$socid = $soc->create($user);
+		if ($socid <= 0) {
+			$this->error = $soc->error ? $soc->error : implode(', ', $soc->errors);
+			$this->db->rollback();
+			return -1;
+		}
+		if (!empty($d['iban'])) {
+			$rib = new CompanyBankAccount($this->db);
+			$rib->socid = $socid;
+			$rib->type = 'ban';
+			$rib->label = 'E-Rechnung';
+			$rib->iban = $d['iban'];
+			$rib->bic = trim($d['bic']);
+			$rib->owner_name = $soc->name;
+			$rib->default_rib = 1;
+			if ($rib->create($user) <= 0 || $rib->update($user) <= 0) {
+				$this->error = $rib->error;
+				$this->db->rollback();
+				return -1;
+			}
+		}
+		if ($this->setSupplier($socid, $user) < 0) {
+			$this->db->rollback();
+			return -1;
+		}
+		$this->db->commit();
+		return $socid;
+	}
+
+	/**
+	 * Try to match all entries without supplier again (after a supplier was created or edited).
+	 *
+	 * @param DoliDB $db   Database handler
+	 * @param User   $user User
+	 * @return int Number of entries linked
+	 */
+	public static function relinkUnmatched($db, $user)
+	{
+		global $conf;
+		$n = 0;
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."einvoice_inbox WHERE entity = ".((int) $conf->entity)." AND fk_soc IS NULL";
+		$res = $db->query($sql);
+		$ids = array();
+		while ($res && ($o = $db->fetch_object($res))) {
+			$ids[] = (int) $o->rowid;
+		}
+		foreach ($ids as $id) {
+			$e = new self($db);
+			if ($e->fetch($id) > 0) {
+				$socid = $e->findSupplier();
+				if ($socid && $e->setSupplier($socid, $user) > 0) {
+					$n++;
+				}
+			}
+		}
+		return $n;
+	}
+
+	/**
 	 * Find an earlier inbox entry for the same invoice (same invoice number and
 	 * same seller VAT id, or same seller name when no VAT id is given).
 	 *

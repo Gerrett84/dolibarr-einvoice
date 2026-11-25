@@ -8,6 +8,8 @@
     <ram:ApplicableHeaderTradeAgreement>
       <ram:BuyerReference>04011000-12345-34</ram:BuyerReference>
       <ram:SellerTradeParty><ram:Name>Muster Großhandel GmbH</ram:Name>
+        <ram:DefinedTradeContact><ram:TelephoneUniversalCommunication><ram:CompleteNumber>+49 30 123456</ram:CompleteNumber></ram:TelephoneUniversalCommunication><ram:EmailURIUniversalCommunication><ram:URIID>buchhaltung@muster.example</ram:URIID></ram:EmailURIUniversalCommunication></ram:DefinedTradeContact>
+        <ram:PostalTradeAddress><ram:PostcodeCode>10115</ram:PostcodeCode><ram:LineOne>Hauptstraße 1</ram:LineOne><ram:LineTwo>Hinterhaus</ram:LineTwo><ram:CityName>Berlin</ram:CityName><ram:CountryID>DE</ram:CountryID></ram:PostalTradeAddress>
         <ram:SpecifiedTaxRegistration><ram:ID schemeID="FC">201/123/45678</ram:ID></ram:SpecifiedTaxRegistration>
         <ram:SpecifiedTaxRegistration><ram:ID schemeID="VA">DE123456789</ram:ID></ram:SpecifiedTaxRegistration>
       </ram:SellerTradeParty>
@@ -16,6 +18,7 @@
     <ram:ApplicableHeaderTradeDelivery/>
     <ram:ApplicableHeaderTradeSettlement>
       <ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>
+      <ram:SpecifiedTradeSettlementPaymentMeans><ram:TypeCode>58</ram:TypeCode><ram:PayeePartyCreditorFinancialAccount><ram:IBANID>DE02 1203 0000 0000 2020 51</ram:IBANID></ram:PayeePartyCreditorFinancialAccount><ram:PayeeSpecifiedCreditorFinancialInstitution><ram:BICID>BYLADEM1001</ram:BICID></ram:PayeeSpecifiedCreditorFinancialInstitution></ram:SpecifiedTradeSettlementPaymentMeans>
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
         <ram:LineTotalAmount>100.00</ram:LineTotalAmount><ram:TaxBasisTotalAmount>100.00</ram:TaxBasisTotalAmount>
         <ram:TaxTotalAmount currencyID="EUR">19.00</ram:TaxTotalAmount><ram:GrandTotalAmount>119.00</ram:GrandTotalAmount><ram:DuePayableAmount>119.00</ram:DuePayableAmount>

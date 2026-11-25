@@ -3,9 +3,10 @@
   <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>
   <cbc:ID>GS-77</cbc:ID><cbc:IssueDate>2026-11-21</cbc:IssueDate><cbc:CreditNoteTypeCode>381</cbc:CreditNoteTypeCode>
   <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode><cbc:BuyerReference>PO-4711</cbc:BuyerReference>
-  <cac:AccountingSupplierParty><cac:Party><cac:PartyName><cbc:Name>Beispiel Lieferant</cbc:Name></cac:PartyName>
+  <cac:AccountingSupplierParty><cac:Party><cbc:EndpointID schemeID="EM">rechnung@lieferant.example</cbc:EndpointID><cac:PartyName><cbc:Name>Beispiel Lieferant</cbc:Name></cac:PartyName><cac:PostalAddress><cbc:StreetName>Industrieweg 7</cbc:StreetName><cbc:CityName>Wien</cbc:CityName><cbc:PostalZone>1010</cbc:PostalZone><cac:Country><cbc:IdentificationCode>AT</cbc:IdentificationCode></cac:Country></cac:PostalAddress>
     <cac:PartyTaxScheme><cbc:CompanyID>DE 987 654 321</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>
     <cac:PartyLegalEntity><cbc:RegistrationName>Beispiel Lieferant AG</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingSupplierParty>
   <cac:AccountingCustomerParty><cac:Party><cac:PartyLegalEntity><cbc:RegistrationName>Kunde GmbH</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty>
+  <cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>AT611904300234573201</cbc:ID></cac:PayeeFinancialAccount></cac:PaymentMeans>
   <cac:LegalMonetaryTotal><cbc:TaxExclusiveAmount currencyID="EUR">50.00</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">59.50</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">59.50</cbc:PayableAmount></cac:LegalMonetaryTotal>
 </CreditNote>

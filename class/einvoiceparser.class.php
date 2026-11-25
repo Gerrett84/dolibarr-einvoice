@@ -261,6 +261,25 @@ class EInvoiceParser
 	}
 
 	/**
+	 * First non-empty value of several queries.
+	 *
+	 * @param DOMXPath     $xp      XPath
+	 * @param string[]     $queries Queries
+	 * @param DOMNode|null $context Context node
+	 * @return string
+	 */
+	private static function firstOf(DOMXPath $xp, $queries, $context = null)
+	{
+		foreach ($queries as $q) {
+			$v = self::v($xp, $q, $context);
+			if ($v !== '') {
+				return $v;
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Convert amount string to float or null.
 	 *
 	 * @param string $s Amount
@@ -302,6 +321,14 @@ class EInvoiceParser
 			'seller_name' => self::v($xp, $agr.'/ram:SellerTradeParty/ram:Name'),
 			'seller_vat' => self::v($xp, $agr.'/ram:SellerTradeParty/ram:SpecifiedTaxRegistration/ram:ID[@schemeID="VA"]'),
 			'seller_taxnumber' => self::v($xp, $agr.'/ram:SellerTradeParty/ram:SpecifiedTaxRegistration/ram:ID[@schemeID="FC"]'),
+			'seller_address' => trim(self::v($xp, $agr.'/ram:SellerTradeParty/ram:PostalTradeAddress/ram:LineOne')."\n".self::v($xp, $agr.'/ram:SellerTradeParty/ram:PostalTradeAddress/ram:LineTwo')),
+			'seller_zip' => self::v($xp, $agr.'/ram:SellerTradeParty/ram:PostalTradeAddress/ram:PostcodeCode'),
+			'seller_town' => self::v($xp, $agr.'/ram:SellerTradeParty/ram:PostalTradeAddress/ram:CityName'),
+			'seller_country' => self::v($xp, $agr.'/ram:SellerTradeParty/ram:PostalTradeAddress/ram:CountryID'),
+			'seller_email' => self::firstOf($xp, array($agr.'/ram:SellerTradeParty/ram:DefinedTradeContact/ram:EmailURIUniversalCommunication/ram:URIID', $agr.'/ram:SellerTradeParty/ram:URIUniversalCommunication/ram:URIID[@schemeID="EM"]')),
+			'seller_phone' => self::v($xp, $agr.'/ram:SellerTradeParty/ram:DefinedTradeContact/ram:TelephoneUniversalCommunication/ram:CompleteNumber'),
+			'seller_iban' => self::v($xp, $set.'/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:IBANID'),
+			'seller_bic' => self::v($xp, $set.'/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeeSpecifiedCreditorFinancialInstitution/ram:BICID'),
 			'buyer_name' => self::v($xp, $agr.'/ram:BuyerTradeParty/ram:Name'),
 			'buyer_reference' => self::v($xp, $agr.'/ram:BuyerReference'),
 			'currency' => self::v($xp, $set.'/ram:InvoiceCurrencyCode'),
@@ -338,6 +365,17 @@ class EInvoiceParser
 			$sellerVat = self::v($xp, 'cac:PartyTaxScheme[cac:TaxScheme/cbc:ID="VAT"]/cbc:CompanyID', $seller);
 			$sellerTax = self::v($xp, 'cac:PartyTaxScheme[not(cac:TaxScheme/cbc:ID="VAT")]/cbc:CompanyID', $seller);
 		}
+		$sellerMore = array_fill_keys(array('seller_address', 'seller_zip', 'seller_town', 'seller_country', 'seller_email', 'seller_phone'), '');
+		if ($seller) {
+			$sellerMore = array(
+				'seller_address' => trim(self::v($xp, 'cac:PostalAddress/cbc:StreetName', $seller)."\n".self::v($xp, 'cac:PostalAddress/cbc:AdditionalStreetName', $seller)),
+				'seller_zip' => self::v($xp, 'cac:PostalAddress/cbc:PostalZone', $seller),
+				'seller_town' => self::v($xp, 'cac:PostalAddress/cbc:CityName', $seller),
+				'seller_country' => self::v($xp, 'cac:PostalAddress/cac:Country/cbc:IdentificationCode', $seller),
+				'seller_email' => self::firstOf($xp, array('cac:Contact/cbc:ElectronicMail', 'cbc:EndpointID[@schemeID="EM"]'), $seller),
+				'seller_phone' => self::v($xp, 'cac:Contact/cbc:Telephone', $seller),
+			);
+		}
 		$buyerName = '';
 		if ($buyer) {
 			$buyerName = self::v($xp, 'cac:PartyLegalEntity/cbc:RegistrationName', $buyer);
@@ -359,6 +397,9 @@ class EInvoiceParser
 			'seller_name' => $sellerName,
 			'seller_vat' => $sellerVat,
 			'seller_taxnumber' => $sellerTax,
+		) + $sellerMore + array(
+			'seller_iban' => self::v($xp, 'cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID', $root),
+			'seller_bic' => self::v($xp, 'cac:PaymentMeans/cac:PayeeFinancialAccount/cac:FinancialInstitutionBranch/cbc:ID', $root),
 			'buyer_name' => $buyerName,
 			'buyer_reference' => self::v($xp, 'cbc:BuyerReference', $root),
 			'currency' => self::v($xp, 'cbc:DocumentCurrencyCode', $root),

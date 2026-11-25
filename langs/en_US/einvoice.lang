@@ -111,3 +111,11 @@ EInvoiceKeepPlainPdfHelp = Stored as "No e-invoice", e.g. for manual entry later
 EInvoiceParallelHint = If another program also reads this mailbox, choose "leave unchanged" for both. Dolibarr remembers processed mails itself and never fetches one twice.
 EInvoiceCronHint = Automatic fetch: enable the scheduled job "Fetch e-invoices from the mailbox" under <a href="%s">Scheduled jobs</a> (every 15 minutes by default).
 EInvoiceWatermark = Fully processed up to
+EInvoiceAutoFetchEvery = every
+EInvoiceMinutes = %s minutes
+EInvoiceCronJobMissing = Scheduled job missing – disable and re-enable the module once.
+EInvoiceSchedulerMissing = No scheduled job has run on this server in the last 2 hours. The Dolibarr scheduler has to be set up once on the system, see <a href="%s">Scheduled jobs → Setup</a>.
+EInvoiceCreateSupplier = Create supplier
+EInvoiceCreateSupplierHelp = data from the e-invoice, editable before saving
+EInvoiceSupplierCreated = Supplier created and linked.
+EInvoiceSupplierRelinked = %s more entries linked as well.
