@@ -137,5 +137,14 @@ $bad = str_replace('<ram:GrandTotalAmount>119.00</ram:GrandTotalAmount>', '<ram:
 check('arithmetic problem detected', count(EInvoiceDetails::check(EInvoiceDetails::read($bad))), 1);
 check('details on xxe rejected', EInvoiceDetails::read(file_get_contents($fx.'xxe.xml'))['syntax'], '');
 
+// ---- Profiles without lines (BASIC WL / MINIMUM)
+$basicwl = preg_replace('#<ram:IncludedSupplyChainTradeLineItem>.*?</ram:IncludedSupplyChainTradeLineItem>\s*#s', '', file_get_contents($fx.'cii-invoice.xml'));
+$d = EInvoiceDetails::read($basicwl);
+check('basicwl summary', var_export($d['summary'], true).'|'.count($d['lines']).'|'.$d['lines'][0]['total'].'|'.$d['lines'][0]['vat_rate'].'|'.count($d['allowances']), 'true|1|100|19|0');
+check('basicwl arithmetic ok', EInvoiceDetails::check($d), array());
+$minimum = preg_replace('#<ram:ApplicableTradeTax>.*?</ram:ApplicableTradeTax>\s*#s', '', $basicwl);
+$d = EInvoiceDetails::read($minimum);
+check('minimum summary from totals', count($d['lines']).'|'.$d['lines'][0]['total'].'|'.$d['lines'][0]['vat_rate'], '1|100|19');
+
 echo "\n".($n - $fail)."/$n passed\n";
 exit($fail ? 1 : 0);

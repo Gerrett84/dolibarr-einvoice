@@ -302,12 +302,15 @@ if ($details && $details['syntax'] && $action !== 'createsupplier') {
 	if ($problems) {
 		print '<div class="warning">'.$langs->trans('EInvoiceArithmeticProblem').'<br>'.dol_escape_htmltag(implode(' · ', $problems)).'</div>';
 	}
+	if (!empty($details['summary'])) {
+		print '<div class="warning">'.$langs->trans('EInvoiceSummaryHint').'</div>';
+	}
 	print '<br><div class="div-table-responsive"><table class="noborder centpercent">';
 	print '<tr class="liste_titre"><td class="width50">'.$langs->trans('EInvoicePos').'</td><td>'.$langs->trans('Description').'</td><td class="right">'.$langs->trans('Qty').'</td><td>'.$langs->trans('Unit').'</td>';
 	print '<td class="right">'.$langs->trans('PriceUHT').'</td><td class="right">'.$langs->trans('VAT').'</td><td class="right">'.$langs->trans('TotalHT').'</td></tr>';
 	foreach ($details['lines'] as $l) {
 		print '<tr class="oddeven'.($l['info_only'] ? ' opacitymedium' : '').'"><td>'.dol_escape_htmltag($l['id']).'</td><td>';
-		print dol_escape_htmltag($l['name']);
+		print !empty($l['summary']) ? '<i>'.$langs->trans('EInvoiceSummaryLine', vatrate((string) $l['vat_rate'], true)).'</i>' : dol_escape_htmltag($l['name']);
 		if ($l['description'] !== '' && $l['description'] !== $l['name']) {
 			print '<br><span class="opacitymedium small">'.dol_nl2br(dol_escape_htmltag($l['description'])).'</span>';
 		}
@@ -353,7 +356,12 @@ if ($details && $details['syntax'] && $action !== 'createsupplier') {
 
 // Buttons
 print '<div class="tabsAction">';
-if ($canInvoice && !$doc->fk_facture_fourn && $details && $details['syntax'] && in_array($doc->status, array(EInvoiceInbox::STATUS_NEW, EInvoiceInbox::STATUS_ERROR), true)) {
+if ((string) $doc->doc_type === '389') {
+	print '<div class="warning">'.$langs->trans('EInvoiceSelfBilledHint').'</div>';
+} elseif ((string) $doc->doc_type === '751') {
+	print '<div class="warning">'.$langs->trans('EInvoiceAccountingInfoHint').'</div>';
+}
+if ($canInvoice && !$doc->fk_facture_fourn && $details && $details['syntax'] && (string) $doc->doc_type !== '389' && in_array($doc->status, array(EInvoiceInbox::STATUS_NEW, EInvoiceInbox::STATUS_ERROR), true)) {
 	if ($doc->fk_soc) {
 		print dolGetButtonAction('', $langs->trans('EInvoiceCreateSupplierInvoice'), 'default', $self.'&action=createinvoice&token='.newToken());
 	} else {

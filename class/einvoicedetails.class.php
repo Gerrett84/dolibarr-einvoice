@@ -47,12 +47,12 @@ class EInvoiceDetails
 		$root = $dom->documentElement;
 		if ($root->namespaceURI === EInvoiceParser::NS_CII_RSM && $root->localName === 'CrossIndustryInvoice') {
 			$res['syntax'] = 'cii';
-			return self::readCii($dom, $res);
+			return self::addSummaryLines(self::readCii($dom, $res));
 		}
 		if (($root->namespaceURI === EInvoiceParser::NS_UBL_INVOICE && $root->localName === 'Invoice')
 			|| ($root->namespaceURI === EInvoiceParser::NS_UBL_CREDITNOTE && $root->localName === 'CreditNote')) {
 			$res['syntax'] = 'ubl';
-			return self::readUbl($dom, $res);
+			return self::addSummaryLines(self::readUbl($dom, $res));
 		}
 		$res['error'] = 'Not an e-invoice';
 		return $res;
@@ -71,7 +71,7 @@ class EInvoiceDetails
 			'line_total' => null, 'allowance_total' => null, 'charge_total' => null, 'tax_basis' => null,
 			'tax_total' => null, 'grand_total' => null, 'amount_due' => null,
 			'order_ref' => '', 'contract_ref' => '', 'billing_ref' => '', 'delivery_date' => '',
-			'period_start' => '', 'period_end' => '', 'notes' => array(),
+			'period_start' => '', 'period_end' => '', 'notes' => array(), 'summary' => false,
 		);
 	}
 
@@ -271,6 +271,57 @@ class EInvoiceDetails
 	}
 
 	/**
+	 * Profiles MINIMUM and BASIC WL carry no lines. Then build one summary line per VAT rate
+	 * from the VAT breakdown (its basis already contains document level allowances/charges),
+	 * or a single line from the totals when there is no breakdown either (MINIMUM).
+	 *
+	 * @param array<string,mixed> $res Result
+	 * @return array<string,mixed>
+	 */
+	private static function addSummaryLines($res)
+	{
+		foreach ($res['lines'] as $l) {
+			if (!$l['info_only']) {
+				return $res;
+			}
+		}
+		$sum = array();
+		foreach ($res['taxes'] as $t) {
+			if ($t['basis'] !== null) {
+				$sum[] = array('basis' => $t['basis'], 'rate' => (float) $t['rate'], 'category' => $t['category']);
+			}
+		}
+		if (!$sum && $res['tax_basis'] !== null) {
+			$rate = 0.0;
+			if ($res['tax_total'] && abs($res['tax_basis']) > 0.001) {
+				$rate = round($res['tax_total'] / $res['tax_basis'] * 100, 2);
+				foreach (array(0, 7, 19) as $std) {
+					if (abs($rate - $std) < 0.1) {
+						$rate = (float) $std;
+					}
+				}
+			}
+			$sum[] = array('basis' => $res['tax_basis'], 'rate' => $rate, 'category' => '');
+		}
+		if (!$sum) {
+			return $res;
+		}
+		$i = 0;
+		foreach ($sum as $x) {
+			$res['lines'][] = array(
+				'id' => (string) ++$i, 'seller_ref' => '', 'name' => '', 'description' => '',
+				'qty' => 1.0, 'unit' => '', 'unit_price' => (float) $x['basis'], 'total' => (float) $x['basis'],
+				'vat_rate' => $x['rate'], 'vat_category' => $x['category'], 'period_start' => '', 'period_end' => '',
+				'info_only' => false, 'summary' => true,
+			);
+		}
+		$res['summary'] = true;
+		$res['allowances_included'] = $res['allowances'];
+		$res['allowances'] = array(); // already contained in the VAT basis
+		return $res;
+	}
+
+	/**
 	 * Normalise a line: missing quantity = 1, unit price derived from the line total when the
 	 * given price does not reproduce it (rebates on line level, rounding).
 	 *
@@ -290,6 +341,7 @@ class EInvoiceDetails
 		if ($l['vat_rate'] === null) {
 			$l['vat_rate'] = 0.0;
 		}
+		$l['summary'] = false;
 		return $l;
 	}
 
@@ -317,7 +369,9 @@ class EInvoiceDetails
 				$allow += (float) $a['amount'];
 			}
 		}
-		if ($d['line_total'] !== null && abs($lines - $d['line_total']) > 0.011) {
+		if (!empty($d['summary'])) {
+			$lines = (float) $d['tax_basis'];
+		} elseif ($d['line_total'] !== null && abs($lines - $d['line_total']) > 0.011) {
 			$p[] = sprintf('lines %.2f <> line total %.2f', $lines, $d['line_total']);
 		}
 		$basis = $lines - $allow + $charge;

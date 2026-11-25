@@ -482,6 +482,10 @@ class EInvoiceInbox
 			$this->error = $langs->trans('EInvoiceAlreadyTransferred');
 			return -1;
 		}
+		if ((string) $this->doc_type === '389') {
+			$this->error = $langs->trans('EInvoiceSelfBilledHint');
+			return -1;
+		}
 		$existing = $this->findExistingSupplierInvoice();
 		if ($existing) {
 			$this->error = $langs->trans('EInvoiceSupplierInvoiceExists', $this->invoice_ref);
@@ -553,7 +557,7 @@ class EInvoiceInbox
 			if ($l['info_only']) {
 				continue;
 			}
-			$desc = $l['name'];
+			$desc = !empty($l['summary']) ? $langs->transnoentities('EInvoiceSummaryLine', vatrate((string) $l['vat_rate'], true)) : $l['name'];
 			if ($l['description'] !== '' && $l['description'] !== $l['name']) {
 				$desc .= ($desc !== '' ? "\n" : '').$l['description'];
 			}
@@ -595,14 +599,15 @@ class EInvoiceInbox
 				$this->warnings[] = $langs->trans('EInvoiceCreditNoteAllowance');
 			}
 			$label = $a['reason'] !== '' ? $a['reason'] : $langs->transnoentities($a['charge'] ? 'EInvoiceCharge' : 'EInvoiceAllowance');
-			$r = $fac->addline($label, ($a['charge'] ? 1 : -1) * abs((float) $a['amount']), (float) $a['vat_rate'], 0, 0, 1, 0, 0, 0, 0, 0, 0, 'HT', 1, ++$rang, 1);
+			$r = $fac->addline($label, ($a['charge'] ? 1 : -1) * (float) $a['amount'], (float) $a['vat_rate'], 0, 0, 1, 0, 0, 0, 0, 0, 0, 'HT', 1, ++$rang, 1);
 			if ($r < 0) {
 				$this->error = $fac->error;
 				$this->db->rollback();
 				return -1;
 			}
 		}
-		$fac->update_price(1);
+		// Round VAT per rate like the e-invoice does (instead of summing rounded line VAT)
+		$fac->update_price(1, '1');
 		$fac->fetch($id);
 
 		// Totals check: what Dolibarr computed vs. what the e-invoice says
@@ -612,6 +617,9 @@ class EInvoiceInbox
 		}
 		if ($d['grand_total'] !== null && abs($fac->total_ttc - $sign * $d['grand_total']) > 0.011) {
 			$this->warnings[] = $langs->trans('EInvoiceTotalMismatch', $langs->transnoentities('AmountTTC'), price($sign * $d['grand_total']), price($fac->total_ttc));
+		}
+		if (!empty($d['summary'])) {
+			$this->warnings[] = $langs->trans('EInvoiceSummaryWarning');
 		}
 		if ($d['prepaid']) {
 			$this->warnings[] = $langs->trans('EInvoicePrepaid', price($d['prepaid']));
@@ -795,7 +803,8 @@ class EInvoiceInbox
 	public static function docTypeLabel($code)
 	{
 		global $langs;
-		$map = array('380' => 'EInvoiceDocType380', '381' => 'EInvoiceDocType381', '384' => 'EInvoiceDocType384', '389' => 'EInvoiceDocType389', '326' => 'EInvoiceDocType326', '875' => 'EInvoiceDocType875', '876' => 'EInvoiceDocType876', '877' => 'EInvoiceDocType877');
-		return isset($map[$code]) ? $langs->trans($map[$code]) : (string) $code;
+		$key = 'EInvoiceDocType'.preg_replace('/\D/', '', (string) $code);
+		$t = $langs->trans($key);
+		return $t !== $key ? $t : (string) $code;
 	}
 }

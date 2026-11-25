@@ -98,6 +98,10 @@ php tests/fake_imap_server.php 10143 /tmp/imap.log & sleep 1; php tests/run_imap
 - Lieferantenrechnung (bzw. Gutschrift) als Entwurf aus der E-Rechnung erstellen: Positionen, Zu-/Abschläge, Fälligkeit, Zahlungsart, Original + XML als Anhang, Summenabgleich
 - Lesbare Rechnungsansicht mit Positionen, USt-Aufschlüsselung und Rechenprüfung
 - Lieferant aus den Rechnungsdaten anlegen (Adresse, USt-ID, Steuernummer, Kontakt, Bankverbindung)
+- Profile MINIMUM / BASIC WL ohne Positionen: Sammelposition je Steuersatz
+- USt-Rundung wie in der E-Rechnung (Rundung der Summe je Steuersatz); negative Nachlässe in Korrekturrechnungen
+- Gutschriftsverfahren (Typ 389) wird nicht als Lieferantenrechnung übernommen
+- Geprüft gegen die KoSIT-XRechnung-Testsuite und das ZUGFeRD-Korpus (285 E-Rechnungen, `tests/run_corpus.php`)
 - Statuszeile im Eingang (letzter Abruf, Ergebnis, automatischer Abruf) und Schalter für den automatischen Abruf in den Einstellungen
 
 ### v0.1.0
