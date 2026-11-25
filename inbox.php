@@ -164,17 +164,68 @@ $param = '&filter='.urlencode($filter).($search !== '' ? '&search='.urlencode($s
 $morehtmlright = '';
 if ($canWrite) {
 	$morehtmlright .= dolGetButtonTitle($langs->trans('EInvoiceUpload'), '', 'fa fa-upload', $_SERVER['PHP_SELF'].'?showupload=1&filter='.urlencode($filter));
-	if (getDolGlobalString('EINVOICE_CONN_TYPE')) {
-		$morehtmlright .= dolGetButtonTitle($langs->trans('EInvoiceFetchNow'), '', 'fa fa-download', $_SERVER['PHP_SELF'].'?action=fetch&token='.newToken().'&filter='.urlencode($filter));
-	}
 }
 
 print_barre_liste($langs->trans('EInvoiceInbox'), $page, $_SERVER['PHP_SELF'], $param, '', '', '', $resql ? $db->num_rows($resql) : 0, $nbtotal, 'fa-file-invoice', 0, $morehtmlright, '', $limit);
 
-$last = getDolGlobalInt('EINVOICE_LAST_FETCH');
-if ($last) {
-	print '<div class="opacitymedium small marginbottomonly">'.$langs->trans('EInvoiceLastFetch').': '.dol_print_date($last, 'dayhour', 'tzuserrel').'</div>';
-} elseif (!getDolGlobalString('EINVOICE_CONN_TYPE') && $user->admin) {
+if (getDolGlobalString('EINVOICE_CONN_TYPE')) {
+	// Status line: last fetch, scheduled job, manual fetch
+	$lastRun = getDolGlobalInt('EINVOICE_LAST_RUN');
+	$lastStatus = getDolGlobalString('EINVOICE_LAST_STATUS');
+	$lastMsg = getDolGlobalString('EINVOICE_LAST_MESSAGE');
+	$lastOk = getDolGlobalInt('EINVOICE_LAST_FETCH');
+
+	print '<div class="info clearboth" style="display:flex;flex-wrap:wrap;gap:6px 24px;align-items:center">';
+	print '<div>'.$langs->trans('EInvoiceLastFetch').': ';
+	if (!$lastRun && !$lastOk) {
+		print '<b>'.$langs->trans('EInvoiceLastFetchNever').'</b>';
+	} else {
+		print '<b>'.dol_print_date($lastRun ? $lastRun : $lastOk, 'dayhour', 'tzuserrel').'</b>';
+		if ($lastStatus === 'error') {
+			print ' – <span class="error">'.$langs->trans('EInvoiceFetchFailed').': '.dol_escape_htmltag($lastMsg).'</span>';
+			if ($lastOk) {
+				print '<br><span class="opacitymedium small">'.$langs->trans('EInvoiceLastFetchSuccess').': '.dol_print_date($lastOk, 'dayhour', 'tzuserrel').'</span>';
+			}
+		} elseif ($lastMsg !== '') {
+			print ' – '.($lastStatus === 'warning' ? '<span class="warning">' : '<span class="opacitymedium">').dol_escape_htmltag($lastMsg).'</span>';
+		}
+	}
+	print '</div>';
+
+	// Scheduled job
+	$cron = null;
+	$sqlc = "SELECT rowid, status, frequency, unitfrequency, datenextrun FROM ".MAIN_DB_PREFIX."cronjob";
+	$sqlc .= " WHERE classesname LIKE '%einvoicefetcher.class.php' AND methodename = 'cronFetch'";
+	$sqlc .= " AND entity IN (0, ".((int) $conf->entity).") ORDER BY entity DESC";
+	$resc2 = $db->query($sqlc);
+	if ($resc2) {
+		$cron = $db->fetch_object($resc2);
+	}
+	print '<div>'.$langs->trans('EInvoiceAutoFetch').': ';
+	$cronLink = $cron ? DOL_URL_ROOT.'/cron/card.php?id='.((int) $cron->rowid) : DOL_URL_ROOT.'/cron/list.php';
+	if ($cron && (int) $cron->status === 1) {
+		$minutes = max(1, (int) round($cron->frequency * $cron->unitfrequency / 60));
+		$next = $db->jdate($cron->datenextrun);
+		print '<b>'.$langs->trans('EInvoiceAutoFetchOn', $minutes).'</b>';
+		if ($next) {
+			print ' <span class="opacitymedium">('.$langs->trans('EInvoiceAutoFetchNext', dol_print_date($next, 'hour', 'tzuserrel')).')</span>';
+			if ($next < dol_now() - 1800) {
+				print '<br><span class="warning">'.$langs->trans('EInvoiceAutoFetchStale').'</span>';
+			}
+		}
+	} else {
+		print '<b>'.$langs->trans('EInvoiceAutoFetchOff').'</b>';
+		if ($user->hasRight('cron', 'create') || $user->admin) {
+			print ' – <a href="'.$cronLink.'">'.$langs->trans('EInvoiceAutoFetchEnable').'</a>';
+		}
+	}
+	print '</div>';
+
+	if ($canWrite) {
+		print '<div style="margin-left:auto"><a class="butAction smallpaddingimp" style="margin:0" href="'.$_SERVER['PHP_SELF'].'?action=fetch&token='.newToken().'&filter='.urlencode($filter).'"><span class="fa fa-sync-alt paddingright"></span>'.$langs->trans('EInvoiceFetchNow').'</a></div>';
+	}
+	print '</div>';
+} elseif ($user->admin) {
 	print info_admin($langs->trans('EInvoiceNotConfigured').' <a href="'.dol_buildpath('/einvoice/admin/setup.php', 1).'">'.$langs->trans('Setup').'</a>');
 }
 

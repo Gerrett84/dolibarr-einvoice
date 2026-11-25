@@ -31,6 +31,8 @@ class EInvoiceFetcher
 	public $errors = array();
 	/** @var string Output for the scheduled job */
 	public $output = '';
+	/** @var bool Run skipped because another one holds the lock */
+	public $locked = false;
 
 	/** @var array<string,int> Statistics of the last run */
 	public $stats = array('mails' => 0, 'skipped' => 0, 'einvoices' => 0, 'others' => 0, 'duplicates' => 0, 'errors' => 0);
@@ -101,6 +103,39 @@ class EInvoiceFetcher
 	 */
 	public function run($user)
 	{
+		$start = dol_now();
+		$this->locked = false;
+		$res = $this->doRun($user);
+		if (!$this->locked) {
+			$this->recordResult($start, $res);
+		}
+		return $res;
+	}
+
+	/**
+	 * Remember time and outcome of a run for the status line in the inbox.
+	 *
+	 * @param int $start Start of the run
+	 * @param int $res   Result of doRun()
+	 * @return void
+	 */
+	private function recordResult($start, $res)
+	{
+		global $conf;
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+		dolibarr_set_const($this->db, 'EINVOICE_LAST_RUN', $start, 'chaine', 0, '', $conf->entity);
+		dolibarr_set_const($this->db, 'EINVOICE_LAST_STATUS', $res < 0 ? 'error' : ($this->stats['errors'] ? 'warning' : 'ok'), 'chaine', 0, '', $conf->entity);
+		dolibarr_set_const($this->db, 'EINVOICE_LAST_MESSAGE', self::cut($res < 0 ? (string) $this->error : $this->summary(), 250), 'chaine', 0, '', $conf->entity);
+	}
+
+	/**
+	 * Fetch new mails (without recording the outcome).
+	 *
+	 * @param User $user User running the fetch
+	 * @return int <0 if KO, >=0 number of new inbox entries
+	 */
+	private function doRun($user)
+	{
 		global $conf;
 
 		$conn = EInvoiceConnector::fromConfig();
@@ -122,6 +157,7 @@ class EInvoiceFetcher
 		$lock = @fopen($lockDir.'/fetch.lock', 'c');
 		if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
 			$this->error = 'A fetch is already running';
+			$this->locked = true;
 			return -1;
 		}
 
