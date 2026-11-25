@@ -1,6 +1,6 @@
 # Dolibarr E-Rechnung (einvoice)
 
-**Version 0.1.0** | E-Rechnungen (XRechnung, ZUGFeRD/Factur-X) automatisch aus dem Postfach holen
+**Version 0.2.0** | E-Rechnungen (XRechnung, ZUGFeRD/Factur-X) automatisch aus dem Postfach holen
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -93,6 +93,12 @@ php tests/fake_imap_server.php 10143 /tmp/imap.log & sleep 1; php tests/run_imap
 ```
 
 ## Changelog
+
+### v0.2.0
+- Lieferantenrechnung (bzw. Gutschrift) als Entwurf aus der E-Rechnung erstellen: Positionen, Zu-/Abschläge, Fälligkeit, Zahlungsart, Original + XML als Anhang, Summenabgleich
+- Lesbare Rechnungsansicht mit Positionen, USt-Aufschlüsselung und Rechenprüfung
+- Lieferant aus den Rechnungsdaten anlegen (Adresse, USt-ID, Steuernummer, Kontakt, Bankverbindung)
+- Statuszeile im Eingang (letzter Abruf, Ergebnis, automatischer Abruf) und Schalter für den automatischen Abruf in den Einstellungen
 
 ### v0.1.0
 - Erste Version: Abruf über Microsoft Graph, IMAP mit OAuth2 oder Passwort; Erkennung von XRechnung (CII/UBL) und ZUGFeRD/Factur-X; Eingang mit Status, Upload und Detailansicht; wählbares Verhalten nach dem Abruf

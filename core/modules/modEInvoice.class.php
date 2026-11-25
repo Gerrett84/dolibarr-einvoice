@@ -40,7 +40,7 @@ class modEInvoice extends DolibarrModules
 		$this->description = "Receive e-invoices (XRechnung, ZUGFeRD/Factur-X) from a mailbox";
 		$this->descriptionlong = "Fetches incoming e-invoices from a mailbox (Microsoft 365 via Graph or any IMAP server), detects XRechnung (CII/UBL) and ZUGFeRD/Factur-X PDFs and collects them in an inbox.";
 
-		$this->version = '0.1.0';
+		$this->version = '0.2.0';
 
 		$this->editor_name = 'Gerrett84';
 		$this->editor_url = 'https://github.com/Gerrett84';

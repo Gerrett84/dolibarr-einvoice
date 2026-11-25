@@ -32,8 +32,10 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once('/einvoice/class/einvoiceinbox.class.php');
+dol_include_once('/einvoice/class/einvoicedetails.class.php');
 
 $langs->loadLangs(array("bills", "companies", "einvoice@einvoice"));
 
@@ -41,6 +43,7 @@ if (!isModEnabled('einvoice') || !$user->hasRight('einvoice', 'read')) {
 	accessforbidden();
 }
 $canWrite = $user->hasRight('einvoice', 'write');
+$canInvoice = $canWrite && ($user->hasRight('fournisseur', 'facture', 'creer') || $user->hasRight('supplier_invoice', 'creer'));
 
 $id = GETPOSTINT('id');
 $action = GETPOST('action', 'aZ09');
@@ -52,6 +55,18 @@ if ($id <= 0 || $doc->fetch($id) <= 0) {
 }
 
 $self = $_SERVER['PHP_SELF'].'?id='.$doc->id;
+
+// Linked supplier deleted in the meantime: unlink and try to match again
+if ($doc->fk_soc) {
+	$chk = new Societe($db);
+	if ($chk->fetch($doc->fk_soc) <= 0) {
+		$doc->setSupplier(0, $user);
+		$sid = $doc->findSupplier();
+		if ($sid) {
+			$doc->setSupplier($sid, $user);
+		}
+	}
+}
 
 /*
  * Actions
@@ -89,6 +104,19 @@ if ($canWrite) {
 		setEventMessages($doc->error, null, 'errors');
 		$action = 'createsupplier';
 	}
+	if ($action === 'confirm_createinvoice' && $confirm === 'yes' && $canInvoice) {
+		$fid = $doc->createSupplierInvoice($user, GETPOSTINT('sourceid'));
+		if ($fid > 0) {
+			setEventMessages($langs->trans('EInvoiceSupplierInvoiceCreated'), null, 'mesgs');
+			if ($doc->warnings) {
+				setEventMessages('', $doc->warnings, 'warnings');
+			}
+			header('Location: '.DOL_URL_ROOT.'/fourn/facture/card.php?id='.$fid);
+			exit;
+		}
+		setEventMessages($doc->error, null, 'errors');
+		$action = ($fid === -2) ? 'createinvoice' : '';
+	}
 	if ($action === 'confirm_delete' && $confirm === 'yes') {
 		if ($doc->delete($user) > 0) {
 			setEventMessages($langs->trans('RecordDeleted'), null, 'mesgs');
@@ -105,6 +133,22 @@ if ($canWrite) {
 $form = new Form($db);
 llxHeader('', $langs->trans('EInvoiceDocument').' '.($doc->invoice_ref ? $doc->invoice_ref : $doc->filename));
 
+$details = $doc->getDetails();
+if ($action === 'createinvoice' && $canInvoice && $doc->fk_soc && !$doc->fk_facture_fourn) {
+	$questions = array();
+	if ($doc->isCreditNote()) {
+		$sourceId = $doc->findSupplierInvoiceByRef($details ? $details['billing_ref'] : '');
+		$opts = array();
+		$sqlf = "SELECT rowid, ref, ref_supplier, total_ttc FROM ".MAIN_DB_PREFIX."facture_fourn WHERE fk_soc = ".((int) $doc->fk_soc);
+		$sqlf .= " AND type <> 2 AND entity IN (".getEntity('invoice').") ORDER BY datef DESC LIMIT 200";
+		$resf = $db->query($sqlf);
+		while ($resf && ($o = $db->fetch_object($resf))) {
+			$opts[$o->rowid] = $o->ref.' – '.$o->ref_supplier.' ('.price($o->total_ttc).')';
+		}
+		$questions[] = array('type' => 'select', 'name' => 'sourceid', 'label' => $langs->trans('EInvoiceCorrectedInvoice'), 'values' => $opts, 'default' => $sourceId, 'select_show_empty' => 1);
+	}
+	print $form->formconfirm($self, $langs->trans('EInvoiceCreateSupplierInvoice'), $langs->trans($doc->isCreditNote() ? 'EInvoiceConfirmCreateCreditNote' : 'EInvoiceConfirmCreateInvoice'), 'confirm_createinvoice', $questions, 'yes', 1, $questions ? 250 : 0, 600);
+}
 if ($action === 'delete' && $canWrite) {
 	print $form->formconfirm($self, $langs->trans('Delete'), $langs->trans('EInvoiceConfirmDelete'), 'confirm_delete', '', 0, 1);
 }
@@ -129,6 +173,11 @@ if ($doc->getDuplicateOf()) {
 $row($langs->trans('EInvoiceFormat'), dol_escape_htmltag($langs->trans('EInvoiceFormat_'.$doc->format)).($doc->profile ? '<br><span class="opacitymedium small">'.dol_escape_htmltag($doc->profile).'</span>' : ''));
 if ($doc->doc_type) {
 	$row($langs->trans('Type'), dol_escape_htmltag(EInvoiceInbox::docTypeLabel($doc->doc_type)).' <span class="opacitymedium">('.dol_escape_htmltag($doc->doc_type).')</span>');
+}
+if ($doc->fk_facture_fourn) {
+	require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
+	$ff = new FactureFournisseur($db);
+	$row($langs->trans('EInvoiceSupplierInvoice'), $ff->fetch($doc->fk_facture_fourn) > 0 ? $ff->getNomUrl(1).' '.$ff->getLibStatut(5) : '<span class="opacitymedium">'.$langs->trans('EInvoiceSupplierInvoiceDeleted').'</span>');
 }
 $row($langs->trans('RefSupplier'), dol_escape_htmltag($doc->invoice_ref));
 $row($langs->trans('DateInvoice'), $doc->invoice_date ? dol_print_date($db->jdate($doc->invoice_date), 'day') : '');
@@ -169,6 +218,23 @@ if ($doc->total_ttc !== null) {
 }
 if ($doc->amount_due !== null && price2num($doc->amount_due) != price2num($doc->total_ttc)) {
 	$row($langs->trans('RemainderToPay'), price($doc->amount_due, 0, $langs, 1, -1, 2, $cur));
+}
+if ($details && $details['syntax']) {
+	if ($details['due_date']) {
+		$row($langs->trans('DateDue'), dol_print_date(dol_stringtotime($details['due_date'], 0), 'day'));
+	}
+	if ($details['payment_terms']) {
+		$row($langs->trans('PaymentConditions'), dol_escape_htmltag($details['payment_terms']));
+	}
+	$pm = EInvoiceInbox::paymentModeCode($details['payment_means']);
+	if ($pm) {
+		$row($langs->trans('PaymentMode'), dol_escape_htmltag($langs->trans('PaymentType'.$pm) !== 'PaymentType'.$pm ? $langs->trans('PaymentType'.$pm) : $pm));
+	}
+	foreach (array('order_ref' => 'EInvoiceOrderRef', 'contract_ref' => 'EInvoiceContractRef', 'billing_ref' => 'EInvoiceBillingRef') as $k => $lbl) {
+		if ($details[$k] !== '') {
+			$row($langs->trans($lbl), dol_escape_htmltag($details[$k]));
+		}
+	}
 }
 print '</table>';
 print '</div><div class="fichehalfright">';
@@ -230,8 +296,70 @@ if ($canWrite && $action === 'createsupplier' && !$doc->fk_soc && $user->hasRigh
 	print '</form>';
 }
 
+// Readable invoice
+if ($details && $details['syntax'] && $action !== 'createsupplier') {
+	$problems = EInvoiceDetails::check($details);
+	if ($problems) {
+		print '<div class="warning">'.$langs->trans('EInvoiceArithmeticProblem').'<br>'.dol_escape_htmltag(implode(' · ', $problems)).'</div>';
+	}
+	print '<br><div class="div-table-responsive"><table class="noborder centpercent">';
+	print '<tr class="liste_titre"><td class="width50">'.$langs->trans('EInvoicePos').'</td><td>'.$langs->trans('Description').'</td><td class="right">'.$langs->trans('Qty').'</td><td>'.$langs->trans('Unit').'</td>';
+	print '<td class="right">'.$langs->trans('PriceUHT').'</td><td class="right">'.$langs->trans('VAT').'</td><td class="right">'.$langs->trans('TotalHT').'</td></tr>';
+	foreach ($details['lines'] as $l) {
+		print '<tr class="oddeven'.($l['info_only'] ? ' opacitymedium' : '').'"><td>'.dol_escape_htmltag($l['id']).'</td><td>';
+		print dol_escape_htmltag($l['name']);
+		if ($l['description'] !== '' && $l['description'] !== $l['name']) {
+			print '<br><span class="opacitymedium small">'.dol_nl2br(dol_escape_htmltag($l['description'])).'</span>';
+		}
+		$extra = array();
+		if ($l['seller_ref'] !== '') {
+			$extra[] = $langs->trans('EInvoiceSellerItemRef').': '.dol_escape_htmltag($l['seller_ref']);
+		}
+		if ($l['period_start'] || $l['period_end']) {
+			$extra[] = dol_print_date(dol_stringtotime($l['period_start'], 0), 'day').' – '.dol_print_date(dol_stringtotime($l['period_end'], 0), 'day');
+		}
+		if ($extra) {
+			print '<br><span class="opacitymedium small">'.implode(' · ', $extra).'</span>';
+		}
+		print '</td><td class="right nowraponall">'.price($l['qty'], 0, $langs, 0, -1, -1).'</td><td class="opacitymedium small">'.dol_escape_htmltag(EInvoiceInbox::unitLabel($l['unit'])).'</td>';
+		print '<td class="right nowraponall">'.price($l['unit_price'], 0, $langs, 0, -1, 4).'</td>';
+		print '<td class="right nowraponall">'.vatrate((string) $l['vat_rate'], true).($l['vat_category'] && $l['vat_category'] !== 'S' ? ' <span class="opacitymedium small">'.dol_escape_htmltag($l['vat_category']).'</span>' : '').'</td>';
+		print '<td class="right nowraponall">'.price($l['total']).'</td></tr>';
+	}
+	foreach ($details['allowances'] as $a) {
+		print '<tr class="oddeven"><td></td><td>'.dol_escape_htmltag($a['reason'] !== '' ? $a['reason'] : $langs->trans($a['charge'] ? 'EInvoiceCharge' : 'EInvoiceAllowance')).'</td><td></td><td></td><td></td>';
+		print '<td class="right">'.vatrate((string) $a['vat_rate'], true).'</td><td class="right nowraponall">'.price(($a['charge'] ? 1 : -1) * (float) $a['amount']).'</td></tr>';
+	}
+	$tot = function ($label, $v, $bold = false) use ($cur, $langs) {
+		if ($v === null) {
+			return;
+		}
+		print '<tr class="liste_total"><td colspan="6" class="right">'.$label.'</td><td class="right nowraponall">'.($bold ? '<b>' : '').price($v, 0, $langs, 1, -1, 2, $cur).($bold ? '</b>' : '').'</td></tr>';
+	};
+	$tot($langs->trans('AmountHT'), $details['tax_basis']);
+	foreach ($details['taxes'] as $t) {
+		$tot($langs->trans('VAT').' '.vatrate((string) $t['rate'], true).($t['category'] && $t['category'] !== 'S' ? ' ('.dol_escape_htmltag($t['category']).($t['reason'] ? ': '.dol_escape_htmltag($t['reason']) : '').')' : '').' <span class="opacitymedium">'.$langs->trans('EInvoiceOnAmount', price($t['basis'])).'</span>', $t['amount']);
+	}
+	$tot($langs->trans('AmountTTC'), $details['grand_total'], true);
+	if ($details['prepaid']) {
+		$tot($langs->trans('AlreadyPaid'), $details['prepaid']);
+		$tot($langs->trans('RemainderToPay'), $details['amount_due'], true);
+	}
+	print '</table></div>';
+	if ($details['notes']) {
+		print '<div class="opacitymedium small margintoponly">'.dol_nl2br(dol_escape_htmltag(implode("\n\n", $details['notes']))).'</div>';
+	}
+}
+
 // Buttons
 print '<div class="tabsAction">';
+if ($canInvoice && !$doc->fk_facture_fourn && $details && $details['syntax'] && in_array($doc->status, array(EInvoiceInbox::STATUS_NEW, EInvoiceInbox::STATUS_ERROR), true)) {
+	if ($doc->fk_soc) {
+		print dolGetButtonAction('', $langs->trans('EInvoiceCreateSupplierInvoice'), 'default', $self.'&action=createinvoice&token='.newToken());
+	} else {
+		print dolGetButtonAction($langs->trans('EInvoiceSupplierFirst'), $langs->trans('EInvoiceCreateSupplierInvoice'), 'default', '#', '', false);
+	}
+}
 if ($canWrite) {
 	if (in_array($doc->status, array(EInvoiceInbox::STATUS_NEW, EInvoiceInbox::STATUS_ERROR, EInvoiceInbox::STATUS_NOEINVOICE), true)) {
 		print dolGetButtonAction('', $langs->trans('EInvoiceIgnore'), 'default', $self.'&action=ignore&token='.newToken());

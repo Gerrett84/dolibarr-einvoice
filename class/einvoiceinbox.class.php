@@ -58,6 +58,8 @@ class EInvoiceInbox
 	public $error_msg;
 	public $fk_soc;
 	public $fk_facture_fourn;
+	/** @var string[] Warnings of the last createSupplierInvoice() */
+	public $warnings = array();
 	public $note;
 	public $datec;
 	public $fk_user_creat;
@@ -390,6 +392,284 @@ class EInvoiceInbox
 		}
 		$this->db->commit();
 		return $socid;
+	}
+
+	/**
+	 * Parsed details (lines, totals, payment) of the stored e-invoice, null if no XML.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	public function getDetails()
+	{
+		$xml = $this->getXml();
+		if ($xml === null) {
+			return null;
+		}
+		dol_include_once('/einvoice/class/einvoicedetails.class.php');
+		return EInvoiceDetails::read($xml);
+	}
+
+	/**
+	 * Is this a credit note (document type 381 and similar)?
+	 *
+	 * @return bool
+	 */
+	public function isCreditNote()
+	{
+		return in_array((string) $this->doc_type, array('381', '261', '262', '296', '308', '396', '420', '458', '532'), true);
+	}
+
+	/**
+	 * Existing supplier invoice of the linked supplier with the same supplier reference.
+	 *
+	 * @return int Id or 0
+	 */
+	public function findExistingSupplierInvoice()
+	{
+		if (!$this->fk_soc || (string) $this->invoice_ref === '') {
+			return 0;
+		}
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture_fourn WHERE entity IN (".getEntity('invoice').")";
+		$sql .= " AND fk_soc = ".((int) $this->fk_soc)." AND ref_supplier = '".$this->db->escape($this->invoice_ref)."'";
+		$res = $this->db->query($sql);
+		$o = $res ? $this->db->fetch_object($res) : null;
+		return $o ? (int) $o->rowid : 0;
+	}
+
+	/**
+	 * Supplier invoice of the linked supplier with the given supplier reference (source of a credit note).
+	 *
+	 * @param string $ref Supplier reference
+	 * @return int Id or 0
+	 */
+	public function findSupplierInvoiceByRef($ref)
+	{
+		if (!$this->fk_soc || trim((string) $ref) === '') {
+			return 0;
+		}
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."facture_fourn WHERE entity IN (".getEntity('invoice').")";
+		$sql .= " AND fk_soc = ".((int) $this->fk_soc)." AND type <> 2 AND ref_supplier = '".$this->db->escape(trim($ref))."'";
+		$res = $this->db->query($sql);
+		$o = $res ? $this->db->fetch_object($res) : null;
+		return $o ? (int) $o->rowid : 0;
+	}
+
+	/**
+	 * Create a draft supplier invoice (or credit note) from this e-invoice.
+	 * Lines, document level allowances/charges, due date and payment mode are taken over,
+	 * the original file is attached. Differences in the totals end up in $this->warnings.
+	 *
+	 * @param User $user     User
+	 * @param int  $sourceId Invoice corrected by a credit note (0 = search by billing reference)
+	 * @return int Id of the supplier invoice, -1 error, -2 credit note without source invoice
+	 */
+	public function createSupplierInvoice($user, $sourceId = 0)
+	{
+		global $conf, $langs;
+		require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$langs->loadLangs(array('bills', 'einvoice@einvoice'));
+		$this->warnings = array();
+
+		$soc = new Societe($this->db);
+		if (!$this->fk_soc || $soc->fetch($this->fk_soc) <= 0) {
+			$this->error = $langs->trans('EInvoiceSupplierUnknown');
+			return -1;
+		}
+		if ($this->fk_facture_fourn) {
+			$this->error = $langs->trans('EInvoiceAlreadyTransferred');
+			return -1;
+		}
+		$existing = $this->findExistingSupplierInvoice();
+		if ($existing) {
+			$this->error = $langs->trans('EInvoiceSupplierInvoiceExists', $this->invoice_ref);
+			return -1;
+		}
+		$d = $this->getDetails();
+		if (!$d || $d['syntax'] === '') {
+			$this->error = $d ? $d['error'] : 'No XML';
+			return -1;
+		}
+		if ($this->currency && $this->currency !== $conf->currency) {
+			$this->error = $langs->trans('EInvoiceForeignCurrency', $this->currency);
+			return -1;
+		}
+
+		$credit = $this->isCreditNote();
+		if ($credit) {
+			if ($sourceId <= 0) {
+				$sourceId = $this->findSupplierInvoiceByRef($d['billing_ref']);
+			}
+			if ($sourceId <= 0 && !getDolGlobalString('INVOICE_CREDIT_NOTE_STANDALONE')) {
+				$this->error = $langs->trans('EInvoiceCreditNoteNeedsSource');
+				return -2;
+			}
+		}
+
+		$this->db->begin();
+		$fac = new FactureFournisseur($this->db);
+		$fac->socid = (int) $this->fk_soc;
+		$fac->ref_supplier = (string) $this->invoice_ref;
+		$fac->type = $credit ? FactureFournisseur::TYPE_CREDIT_NOTE : FactureFournisseur::TYPE_STANDARD;
+		if ($credit && $sourceId > 0) {
+			$fac->fk_facture_source = (int) $sourceId;
+		}
+		$fac->date = $this->invoice_date ? dol_stringtotime($this->invoice_date, 0) : dol_now();
+		if ($d['due_date'] !== '') {
+			$fac->date_echeance = dol_stringtotime($d['due_date'], 0);
+		}
+		$modeCode = self::paymentModeCode($d['payment_means']);
+		if ($modeCode !== '') {
+			$modeId = (int) dol_getIdFromCode($this->db, $modeCode, 'c_paiement', 'code', 'id', 1);
+			if ($modeId > 0) {
+				$fac->mode_reglement_id = $modeId;
+			}
+		}
+		$note = array($langs->trans('EInvoiceNoteFrom', $this->id, $this->filename));
+		foreach (array('order_ref' => 'EInvoiceOrderRef', 'contract_ref' => 'EInvoiceContractRef', 'billing_ref' => 'EInvoiceBillingRef') as $k => $lbl) {
+			if ($d[$k] !== '') {
+				$note[] = $langs->transnoentities($lbl).': '.$d[$k];
+			}
+		}
+		if ($d['payment_terms'] !== '') {
+			$note[] = $langs->transnoentities('PaymentConditions').': '.$d['payment_terms'];
+		}
+		foreach ($d['notes'] as $n) {
+			$note[] = $n;
+		}
+		$fac->note_private = implode("\n", $note);
+
+		$id = $fac->create($user);
+		if ($id <= 0) {
+			$this->error = $fac->error ? $fac->error : implode(', ', $fac->errors);
+			$this->db->rollback();
+			return -1;
+		}
+
+		$rang = 0;
+		foreach ($d['lines'] as $l) {
+			if ($l['info_only']) {
+				continue;
+			}
+			$desc = $l['name'];
+			if ($l['description'] !== '' && $l['description'] !== $l['name']) {
+				$desc .= ($desc !== '' ? "\n" : '').$l['description'];
+			}
+			$type = in_array($l['unit'], array('HUR', 'MIN', 'DAY', 'MON', 'WEE', 'ANN', 'LH'), true) ? 1 : 0;
+			$r = $fac->addline(
+				$desc,
+				(float) $l['unit_price'],
+				(float) $l['vat_rate'],
+				0,
+				0,
+				(float) $l['qty'],
+				0,
+				0,
+				$l['period_start'] ? dol_stringtotime($l['period_start'], 0) : 0,
+				$l['period_end'] ? dol_stringtotime($l['period_end'], 0) : 0,
+				0,
+				0,
+				'HT',
+				$type,
+				++$rang,
+				1,
+				array(),
+				null,
+				0,
+				0,
+				(string) $l['seller_ref']
+			);
+			if ($r < 0) {
+				$this->error = $fac->error;
+				$this->db->rollback();
+				return -1;
+			}
+		}
+		foreach ($d['allowances'] as $a) {
+			if (!$a['amount']) {
+				continue;
+			}
+			if ($credit && !$a['charge']) {
+				$this->warnings[] = $langs->trans('EInvoiceCreditNoteAllowance');
+			}
+			$label = $a['reason'] !== '' ? $a['reason'] : $langs->transnoentities($a['charge'] ? 'EInvoiceCharge' : 'EInvoiceAllowance');
+			$r = $fac->addline($label, ($a['charge'] ? 1 : -1) * abs((float) $a['amount']), (float) $a['vat_rate'], 0, 0, 1, 0, 0, 0, 0, 0, 0, 'HT', 1, ++$rang, 1);
+			if ($r < 0) {
+				$this->error = $fac->error;
+				$this->db->rollback();
+				return -1;
+			}
+		}
+		$fac->update_price(1);
+		$fac->fetch($id);
+
+		// Totals check: what Dolibarr computed vs. what the e-invoice says
+		$sign = $credit ? -1 : 1;
+		if ($d['tax_basis'] !== null && abs($fac->total_ht - $sign * $d['tax_basis']) > 0.011) {
+			$this->warnings[] = $langs->trans('EInvoiceTotalMismatch', $langs->transnoentities('AmountHT'), price($sign * $d['tax_basis']), price($fac->total_ht));
+		}
+		if ($d['grand_total'] !== null && abs($fac->total_ttc - $sign * $d['grand_total']) > 0.011) {
+			$this->warnings[] = $langs->trans('EInvoiceTotalMismatch', $langs->transnoentities('AmountTTC'), price($sign * $d['grand_total']), price($fac->total_ttc));
+		}
+		if ($d['prepaid']) {
+			$this->warnings[] = $langs->trans('EInvoicePrepaid', price($d['prepaid']));
+		}
+
+		// Attach original (and the extracted XML of a PDF)
+		$dir = $conf->fournisseur->facture->dir_output.'/'.get_exdir($fac->id, 2, 0, 0, $fac, 'invoice_supplier').dol_sanitizeFileName($fac->ref);
+		dol_mkdir($dir);
+		$src = $this->getFullPath('file');
+		if ($src) {
+			dol_copy($src, $dir.'/'.dol_sanitizeFileName($this->filename), '0', 1);
+		}
+		$xmlSrc = $this->getFullPath('xml');
+		if ($xmlSrc && $xmlSrc !== $src) {
+			dol_copy($xmlSrc, $dir.'/'.dol_sanitizeFileName(pathinfo($this->filename, PATHINFO_FILENAME).'.xml'), '0', 1);
+		}
+
+		$sql = "UPDATE ".MAIN_DB_PREFIX."einvoice_inbox SET fk_facture_fourn = ".((int) $fac->id).", status = ".self::STATUS_DONE.", fk_user_modif = ".((int) $user->id);
+		$sql .= " WHERE rowid = ".((int) $this->id);
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			$this->db->rollback();
+			return -1;
+		}
+		$this->db->commit();
+		$this->fk_facture_fourn = $fac->id;
+		$this->status = self::STATUS_DONE;
+		return $fac->id;
+	}
+
+	/**
+	 * Readable label of a UN/ECE Rec 20 unit code.
+	 *
+	 * @param string $code Unit code
+	 * @return string
+	 */
+	public static function unitLabel($code)
+	{
+		global $langs;
+		$code = (string) $code;
+		if ($code === '') {
+			return '';
+		}
+		$key = 'EInvoiceUnit_'.$code;
+		$t = $langs->trans($key);
+		return $t !== $key ? $t : $code;
+	}
+
+	/**
+	 * UNTDID 4461 payment means code to Dolibarr payment mode code.
+	 *
+	 * @param string $code Code from the e-invoice
+	 * @return string Dolibarr code or ''
+	 */
+	public static function paymentModeCode($code)
+	{
+		$map = array('10' => 'LIQ', '20' => 'CHQ', '30' => 'VIR', '31' => 'VIR', '42' => 'VIR', '58' => 'VIR', '49' => 'PRE', '59' => 'PRE', '48' => 'CB', '54' => 'CB', '55' => 'CB');
+		return isset($map[(string) $code]) ? $map[(string) $code] : '';
 	}
 
 	/**

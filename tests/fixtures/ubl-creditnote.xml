@@ -8,5 +8,10 @@
     <cac:PartyLegalEntity><cbc:RegistrationName>Beispiel Lieferant AG</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingSupplierParty>
   <cac:AccountingCustomerParty><cac:Party><cac:PartyLegalEntity><cbc:RegistrationName>Kunde GmbH</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty>
   <cac:PaymentMeans><cbc:PaymentMeansCode>58</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>AT611904300234573201</cbc:ID></cac:PayeeFinancialAccount></cac:PaymentMeans>
-  <cac:LegalMonetaryTotal><cbc:TaxExclusiveAmount currencyID="EUR">50.00</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">59.50</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">59.50</cbc:PayableAmount></cac:LegalMonetaryTotal>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="EUR">9.50</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">50.00</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">9.50</cbc:TaxAmount><cac:TaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>19</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal>
+  <cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>RE-0042</cbc:ID></cac:InvoiceDocumentReference></cac:BillingReference>
+  <cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">50.00</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">50.00</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">59.50</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">59.50</cbc:PayableAmount></cac:LegalMonetaryTotal>
+  <cac:CreditNoteLine><cbc:ID>1</cbc:ID><cbc:CreditedQuantity unitCode="C62">1</cbc:CreditedQuantity><cbc:LineExtensionAmount currencyID="EUR">50.00</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Name>Rücknahme Schließer</cbc:Name><cac:SellersItemIdentification><cbc:ID>TS93</cbc:ID></cac:SellersItemIdentification><cac:ClassifiedTaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>19</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="EUR">50.00</cbc:PriceAmount></cac:Price></cac:CreditNoteLine>
 </CreditNote>

@@ -114,5 +114,28 @@ check('mime formats', $kinds, array('ubl', 'zugferd', 'pdf'));
 $p = EInvoiceMime::parseParams('attachment; filename="a \"b\".pdf"; size=12');
 check('quoted param', $p['params']['filename'], 'a "b".pdf');
 
+// ---- Details (lines, allowances, payment)
+require_once __DIR__.'/../class/einvoicedetails.class.php';
+$d = EInvoiceDetails::read(file_get_contents($fx.'cii-invoice.xml'));
+check('cii details syntax', $d['syntax'], 'cii');
+check('cii lines', count($d['lines']), 2);
+check('cii line1 name/ref', $d['lines'][0]['name'].'|'.$d['lines'][0]['seller_ref'].'|'.$d['lines'][0]['description'], 'Türband|A-100|verzinkt');
+check('cii line1 qty/price (basis qty, rebate via total)', $d['lines'][0]['qty'].'|'.round($d['lines'][0]['unit_price'], 4).'|'.$d['lines'][0]['total'], '2|55|110');
+check('cii line2 unit/vat', $d['lines'][1]['unit'].'|'.$d['lines'][1]['vat_rate'].'|'.$d['lines'][1]['unit_price'], 'HUR|19|3');
+check('cii allowance', count($d['allowances']).'|'.var_export($d['allowances'][0]['charge'], true).'|'.$d['allowances'][0]['amount'].'|'.$d['allowances'][0]['reason'], '1|false|19|Treuerabatt');
+check('cii due/terms/means', $d['due_date'].'|'.$d['payment_terms'].'|'.$d['payment_means'], '2026-12-04|14 Tage netto|58');
+check('cii totals', $d['line_total'].'|'.$d['tax_basis'].'|'.$d['tax_total'].'|'.$d['grand_total'], '119|100|19|119');
+check('cii arithmetic ok', EInvoiceDetails::check($d), array());
+
+$d = EInvoiceDetails::read(file_get_contents($fx.'ubl-creditnote.xml'));
+check('ubl details lines', count($d['lines']).'|'.$d['lines'][0]['name'].'|'.$d['lines'][0]['seller_ref'].'|'.$d['lines'][0]['qty'].'|'.$d['lines'][0]['unit_price'], '1|Rücknahme Schließer|TS93|1|50');
+check('ubl billing ref', $d['billing_ref'], 'RE-0042');
+check('ubl taxes', count($d['taxes']).'|'.$d['taxes'][0]['amount'].'|'.$d['tax_total'], '1|9.5|9.5');
+check('ubl arithmetic ok', EInvoiceDetails::check($d), array());
+
+$bad = str_replace('<ram:GrandTotalAmount>119.00</ram:GrandTotalAmount>', '<ram:GrandTotalAmount>120.00</ram:GrandTotalAmount>', file_get_contents($fx.'cii-invoice.xml'));
+check('arithmetic problem detected', count(EInvoiceDetails::check(EInvoiceDetails::read($bad))), 1);
+check('details on xxe rejected', EInvoiceDetails::read(file_get_contents($fx.'xxe.xml'))['syntax'], '');
+
 echo "\n".($n - $fail)."/$n passed\n";
 exit($fail ? 1 : 0);
