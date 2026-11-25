@@ -16,6 +16,8 @@
 /**
  * Inbox entry.
  */
+require_once __DIR__.'/../lib/einvoice.lib.php';
+
 class EInvoiceInbox
 {
 	const STATUS_NEW = 0;
@@ -363,7 +365,7 @@ class EInvoiceInbox
 		require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
 
 		if (trim($d['name']) === '') {
-			$this->error = 'Name missing';
+			$this->error = einvoice_t('EInvoiceErrNameMissing', 'Name missing');
 			return -1;
 		}
 		$this->db->begin();
@@ -541,7 +543,7 @@ class EInvoiceInbox
 		require_once DOL_DOCUMENT_ROOT.'/core/class/discount.class.php';
 		$dep = new FactureFournisseur($this->db);
 		if ($dep->fetch($facid) <= 0 || (int) $dep->type !== FactureFournisseur::TYPE_DEPOSIT || (int) $dep->status === 0) {
-			$this->error = 'Deposit invoice '.$facid.' not found or not validated';
+			$this->error = einvoice_t('EInvoiceErrDepositNotFound', 'Deposit invoice %s not found or not validated', $facid);
 			return false;
 		}
 		$sum = array();
@@ -660,7 +662,7 @@ class EInvoiceInbox
 		}
 		$d = $this->getDetails();
 		if (!$d || $d['syntax'] === '') {
-			$this->error = $d ? $d['error'] : 'No XML';
+			$this->error = $d ? $d['error'] : einvoice_t('EInvoiceErrNoXml', 'No invoice data (XML) found');
 			return -1;
 		}
 		if ($this->currency && $this->currency !== $conf->currency) {

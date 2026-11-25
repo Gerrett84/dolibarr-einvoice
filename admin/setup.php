@@ -91,7 +91,7 @@ if ($action === 'save_connection') {
 	// Different mailbox/folder: start the watermark again from the configured date
 	if ($mailboxOld !== getDolGlobalString('EINVOICE_MAILBOX') || $folderOld !== getDolGlobalString('EINVOICE_SOURCE_FOLDER') || $typeOld !== $type) {
 		dolibarr_del_const($db, 'EINVOICE_WATERMARK', $conf->entity);
-		foreach (array('EINVOICE_LAST_RUN', 'EINVOICE_LAST_STATUS', 'EINVOICE_LAST_MESSAGE', 'EINVOICE_LAST_FETCH') as $k) {
+		foreach (array('EINVOICE_LAST_RUN', 'EINVOICE_LAST_STATUS', 'EINVOICE_LAST_MESSAGE', 'EINVOICE_LAST_STATS', 'EINVOICE_LAST_FETCH') as $k) {
 			dolibarr_del_const($db, $k, $conf->entity);
 		}
 	}

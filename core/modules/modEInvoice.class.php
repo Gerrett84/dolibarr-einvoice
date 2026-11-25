@@ -38,7 +38,7 @@ class modEInvoice extends DolibarrModules
 		$this->name = strtolower(preg_replace('/^mod/i', '', get_class($this)));
 
 		$this->description = "Receive e-invoices (XRechnung, ZUGFeRD/Factur-X) from a mailbox";
-		$this->descriptionlong = "Fetches incoming e-invoices from a mailbox (Microsoft 365 via Graph or any IMAP server), detects XRechnung (CII/UBL) and ZUGFeRD/Factur-X PDFs and collects them in an inbox.";
+		$this->descriptionlong = 'Module500220DescLong';
 
 		$this->version = '0.3.0';
 
@@ -71,7 +71,7 @@ class modEInvoice extends DolibarrModules
 				'objectname' => 'EInvoiceFetcher',
 				'method' => 'cronFetch',
 				'parameters' => '',
-				'comment' => 'Fetch e-invoices from the configured mailbox',
+				'comment' => 'EInvoiceFetchCronComment',
 				'frequency' => 15,
 				'unitfrequency' => 60,
 				'status' => 0,

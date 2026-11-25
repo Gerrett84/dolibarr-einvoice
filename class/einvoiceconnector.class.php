@@ -23,6 +23,8 @@
  *   'size'    => size in bytes (0 if unknown)
  * )
  */
+require_once __DIR__.'/../lib/einvoice.lib.php';
+
 abstract class EInvoiceConnector
 {
 	/** @var string Last error */
@@ -147,7 +149,7 @@ abstract class EInvoiceConnector
 	protected function getClientCredentialsToken($tenant, $clientId, $clientSecret, $scope)
 	{
 		if ($tenant === '' || $clientId === '' || $clientSecret === '') {
-			$this->error = 'Tenant, client id and client secret are required';
+			$this->error = einvoice_t('EInvoiceErrOauthMissing', 'Tenant, client id and client secret are required');
 			return false;
 		}
 		$url = 'https://login.microsoftonline.com/'.rawurlencode($tenant).'/oauth2/v2.0/token';
@@ -166,7 +168,7 @@ abstract class EInvoiceConnector
 			if (is_array($json)) {
 				$msg = !empty($json['error_description']) ? $json['error_description'] : (isset($json['error']) ? $json['error'] : '');
 			}
-			$this->error = 'Token request failed (HTTP '.$res['code'].')'.($msg ? ': '.strtok($msg, "\r\n") : '');
+			$this->error = einvoice_t('EInvoiceErrToken', 'Sign-in at Microsoft failed (HTTP %s)', $res['code']).($msg ? ': '.strtok($msg, "\r\n") : '');
 			return false;
 		}
 		return $json['access_token'];
@@ -184,7 +186,7 @@ abstract class EInvoiceConnector
 	protected function http($method, $url, $headers = array(), $body = null)
 	{
 		if (!function_exists('curl_init')) {
-			$this->error = 'PHP curl extension missing';
+			$this->error = einvoice_t('EInvoiceErrCurl', 'PHP extension curl is missing');
 			return false;
 		}
 		$respHeaders = array();
@@ -208,7 +210,7 @@ abstract class EInvoiceConnector
 		}
 		$resp = curl_exec($ch);
 		if ($resp === false) {
-			$this->error = 'HTTP error: '.curl_error($ch);
+			$this->error = einvoice_t('EInvoiceErrHttp', 'Connection error: %s', curl_error($ch));
 			curl_close($ch);
 			return false;
 		}

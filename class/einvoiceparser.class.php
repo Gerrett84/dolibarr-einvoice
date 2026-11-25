@@ -19,6 +19,8 @@
  * No external libraries: XML via DOM/XPath, embedded XML of a PDF/A-3
  * (ZUGFeRD/Factur-X) is located by scanning for /Type /EmbeddedFile streams.
  */
+require_once __DIR__.'/../lib/einvoice.lib.php';
+
 class EInvoiceParser
 {
 	const NS_CII_RSM = 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100';
@@ -47,7 +49,7 @@ class EInvoiceParser
 		$result = array('kind' => 'other', 'format' => 'other', 'xml' => null, 'data' => array(), 'error' => '');
 
 		if (strlen($content) > self::MAX_FILE_SIZE) {
-			$result['error'] = 'File too large';
+			$result['error'] = einvoice_t('EInvoiceErrFileTooLarge', 'File too large');
 			return $result;
 		}
 
@@ -103,7 +105,7 @@ class EInvoiceParser
 		$out = array('xml' => null, 'error' => '');
 
 		if (preg_match('/\/Encrypt\s+\d+\s+\d+\s+R/', $pdf)) {
-			$out['error'] = 'PDF is encrypted, embedded files cannot be read';
+			$out['error'] = einvoice_t('EInvoiceErrPdfEncrypted', 'PDF is encrypted, embedded files cannot be read');
 			return $out;
 		}
 
@@ -248,7 +250,7 @@ class EInvoiceParser
 		$error = '';
 		$xml = preg_replace('/^\xEF\xBB\xBF/', '', (string) $xml);
 		if (preg_match('/<!DOCTYPE/i', substr($xml, 0, 4096))) {
-			$error = 'XML with DOCTYPE is not accepted';
+			$error = einvoice_t('EInvoiceErrDoctype', 'XML with DOCTYPE is not accepted (security)');
 			return null;
 		}
 		$prev = libxml_use_internal_errors(true);
@@ -256,7 +258,7 @@ class EInvoiceParser
 		$ok = $dom->loadXML($xml, LIBXML_NONET | LIBXML_NOBLANKS);
 		if (!$ok) {
 			$err = libxml_get_last_error();
-			$error = 'Invalid XML'.($err ? ': '.trim($err->message) : '');
+			$error = einvoice_t('EInvoiceErrInvalidXml', 'Invalid XML').($err ? ': '.trim($err->message) : '');
 			libxml_clear_errors();
 			libxml_use_internal_errors($prev);
 			return null;

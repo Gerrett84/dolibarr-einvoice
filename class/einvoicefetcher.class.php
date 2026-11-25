@@ -21,6 +21,8 @@ require_once __DIR__.'/einvoiceinbox.class.php';
 /**
  * Fetch run (manual button or scheduled job).
  */
+require_once __DIR__.'/../lib/einvoice.lib.php';
+
 class EInvoiceFetcher
 {
 	/** @var DoliDB */
@@ -55,7 +57,18 @@ class EInvoiceFetcher
 	 */
 	public function cronFetch()
 	{
-		global $user;
+		global $user, $langs, $mysoc;
+		// Command line has no browser language: with "auto" use the language of the company's country
+		$lang = getDolGlobalString('MAIN_LANG_DEFAULT', 'auto');
+		if ((empty($user->conf->MAIN_LANG_DEFAULT) || $user->conf->MAIN_LANG_DEFAULT === 'auto') && ($lang === '' || $lang === 'auto')
+			&& is_object($mysoc) && !empty($mysoc->country_code) && function_exists('getLanguageCodeFromCountryCode')) {
+			$code = getLanguageCodeFromCountryCode($mysoc->country_code);
+			if ($code && $code !== $langs->getDefaultLang()) {
+				$langs->setDefaultLang($code);
+				$langs->tab_translate = array();
+				$langs->loadLangs(array('main', 'einvoice@einvoice'));
+			}
+		}
 		$res = $this->run($user);
 		$this->output = $this->summary();
 		if ($res < 0) {
@@ -126,11 +139,25 @@ class EInvoiceFetcher
 	 */
 	public function summary()
 	{
+		return self::summaryText($this->stats);
+	}
+
+	/**
+	 * Human readable summary from counters.
+	 *
+	 * @param array<string,int> $stats Counters mails, einvoices, others, errors, duplicates
+	 * @return string
+	 */
+	public static function summaryText($stats)
+	{
 		global $langs;
 		$langs->load('einvoice@einvoice');
-		$s = $langs->trans('EInvoiceFetchSummary', $this->stats['mails'], $this->stats['einvoices'], $this->stats['others'], $this->stats['errors']);
-		if ($this->stats['duplicates']) {
-			$s .= ' '.$langs->trans('EInvoiceFetchDuplicates', $this->stats['duplicates']);
+		$g = function ($k) use ($stats) {
+			return isset($stats[$k]) ? (int) $stats[$k] : 0;
+		};
+		$s = $langs->trans('EInvoiceFetchSummary', $g('mails'), $g('einvoices'), $g('others'), $g('errors'));
+		if ($g('duplicates')) {
+			$s .= ' '.$langs->trans('EInvoiceFetchDuplicates', $g('duplicates'));
 		}
 		return $s;
 	}
@@ -179,7 +206,9 @@ class EInvoiceFetcher
 		require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 		dolibarr_set_const($this->db, 'EINVOICE_LAST_RUN', $start, 'chaine', 0, '', $conf->entity);
 		dolibarr_set_const($this->db, 'EINVOICE_LAST_STATUS', $res < 0 ? 'error' : ($this->stats['errors'] ? 'warning' : 'ok'), 'chaine', 0, '', $conf->entity);
-		dolibarr_set_const($this->db, 'EINVOICE_LAST_MESSAGE', self::cut($res < 0 ? (string) $this->error : $this->summary(), 250), 'chaine', 0, '', $conf->entity);
+		dolibarr_set_const($this->db, 'EINVOICE_LAST_MESSAGE', self::cut($res < 0 ? (string) $this->error : '', 250), 'chaine', 0, '', $conf->entity);
+		// Counters are stored, the text is built in the language of whoever looks at it
+		dolibarr_set_const($this->db, 'EINVOICE_LAST_STATS', $res < 0 ? '' : json_encode($this->stats), 'chaine', 0, '', $conf->entity);
 	}
 
 	/**
@@ -194,13 +223,13 @@ class EInvoiceFetcher
 
 		$conn = EInvoiceConnector::fromConfig();
 		if (!$conn) {
-			$this->error = 'No mailbox connection configured';
+			$this->error = einvoice_t('EInvoiceErrNoConnection', 'No mailbox connection configured');
 			return -1;
 		}
 
 		$since = (int) getDolGlobalInt('EINVOICE_FETCH_SINCE');
 		if ($since <= 0) {
-			$this->error = 'Please set "fetch mails received since" in the module setup';
+			$this->error = einvoice_t('EInvoiceErrNoSince', 'Please set "Fetch mails received since" in the module setup');
 			return -1;
 		}
 		$limit = max(1, getDolGlobalInt('EINVOICE_MAX_PER_RUN', 50));
@@ -210,7 +239,7 @@ class EInvoiceFetcher
 		dol_mkdir($lockDir);
 		$lock = @fopen($lockDir.'/fetch.lock', 'c');
 		if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
-			$this->error = 'A fetch is already running';
+			$this->error = einvoice_t('EInvoiceErrRunning', 'A fetch is already running');
 			$this->locked = true;
 			return -1;
 		}
@@ -431,11 +460,11 @@ class EInvoiceFetcher
 		$rel = 'inbox/'.dol_print_date(dol_now(), '%Y/%m').'/'.substr($hash, 0, 16);
 		$dir = self::dataDir().'/'.$rel;
 		if (dol_mkdir($dir) < 0) {
-			$this->error = 'Cannot create directory '.$dir;
+			$this->error = einvoice_t('EInvoiceErrMkdir', 'Cannot create directory %s', $dir);
 			return -1;
 		}
 		if (file_put_contents($dir.'/'.$safe, $content) === false) {
-			$this->error = 'Cannot write file';
+			$this->error = einvoice_t('EInvoiceErrWrite', 'Cannot write file');
 			return -1;
 		}
 		dolChmod($dir.'/'.$safe);

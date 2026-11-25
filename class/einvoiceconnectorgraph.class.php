@@ -19,6 +19,8 @@ require_once __DIR__.'/einvoiceconnector.class.php';
  * Microsoft Graph connector (client credentials, application permission Mail.ReadWrite
  * limited to the invoice mailbox via Exchange RBAC for applications).
  */
+require_once __DIR__.'/../lib/einvoice.lib.php';
+
 class EInvoiceConnectorGraph extends EInvoiceConnector
 {
 	/** @var string */
@@ -41,7 +43,7 @@ class EInvoiceConnectorGraph extends EInvoiceConnector
 	public function connect()
 	{
 		if ($this->mailbox === '') {
-			$this->error = 'Mailbox address is required';
+			$this->error = einvoice_t('EInvoiceErrMailboxMissing', 'Mailbox address is required');
 			return false;
 		}
 		$token = $this->getClientCredentialsToken($this->tenant, $this->clientId, $this->clientSecret, 'https://graph.microsoft.com/.default');
@@ -98,7 +100,7 @@ class EInvoiceConnectorGraph extends EInvoiceConnector
 			if (is_array($j) && isset($j['error']['message'])) {
 				$msg = $j['error']['code'].': '.$j['error']['message'];
 			}
-			$this->error = 'Graph '.$method.' failed (HTTP '.$res['code'].')'.($msg ? ' - '.$msg : '');
+			$this->error = einvoice_t('EInvoiceErrGraph', 'Microsoft Graph %s failed (HTTP %s)', $method, $res['code']).($msg ? ' - '.$msg : '');
 			return false;
 		}
 		if ($raw) {
@@ -158,7 +160,7 @@ class EInvoiceConnectorGraph extends EInvoiceConnector
 				continue;
 			}
 			if (!$create) {
-				$this->error = 'Folder not found: '.$path;
+				$this->error = einvoice_t('EInvoiceErrFolderNotFound', 'Folder not found: %s', $path);
 				return false;
 			}
 			$new = $this->call('POST', $listUrl, array('displayName' => $name));

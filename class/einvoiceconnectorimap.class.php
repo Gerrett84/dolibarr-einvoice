@@ -19,6 +19,8 @@ require_once __DIR__.'/einvoiceconnector.class.php';
  * IMAP connector. Uses plain sockets so it works without ext-imap (removed in PHP 8.4)
  * and supports XOAUTH2 for Microsoft 365.
  */
+require_once __DIR__.'/../lib/einvoice.lib.php';
+
 class EInvoiceConnectorImap extends EInvoiceConnector
 {
 	/** @var string */
@@ -68,7 +70,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		$errstr = '';
 		$sock = @stream_socket_client($remote, $errno, $errstr, $this->timeout, STREAM_CLIENT_CONNECT, $ctx);
 		if (!$sock) {
-			$this->error = 'IMAP connect to '.$this->host.':'.$this->port.' failed: '.$errstr;
+			$this->error = einvoice_t('EInvoiceErrImapConnect', 'Connection to IMAP server %s failed: %s', $this->host.':'.$this->port, $errstr);
 			return false;
 		}
 		stream_set_timeout($sock, $this->timeout);
@@ -76,7 +78,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 
 		$greeting = $this->readLine();
 		if ($greeting === false || strpos($greeting, '* OK') !== 0) {
-			$this->error = 'Unexpected IMAP greeting: '.trim((string) $greeting);
+			$this->error = einvoice_t('EInvoiceErrImapGreeting', 'Unexpected answer of the IMAP server: %s', trim((string) $greeting));
 			$this->close();
 			return false;
 		}
@@ -84,7 +86,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		if ($this->security === 'starttls') {
 			$r = $this->command('STARTTLS');
 			if ($r['status'] !== 'OK' || !@stream_socket_enable_crypto($this->sock, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | (defined('STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT') ? STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT : 0))) {
-				$this->error = 'STARTTLS failed';
+				$this->error = einvoice_t('EInvoiceErrStarttls', 'Encryption (STARTTLS) failed');
 				$this->close();
 				return false;
 			}
@@ -102,7 +104,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 			$r = $this->command('LOGIN '.$this->quote($this->login).' '.$this->quote($this->password));
 		}
 		if ($r['status'] !== 'OK') {
-			$this->error = 'IMAP login failed: '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImapLogin', 'IMAP login failed: %s', $r['text']);
 			$this->close();
 			return false;
 		}
@@ -159,7 +161,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 			if ($chunk === false || $chunk === '') {
 				$meta = stream_get_meta_data($this->sock);
 				if (!empty($meta['timed_out']) || feof($this->sock)) {
-					$this->error = 'IMAP read failed';
+					$this->error = einvoice_t('EInvoiceErrImapRead', 'Reading from the IMAP server failed');
 					return false;
 				}
 				continue;
@@ -285,7 +287,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		}
 		$r = $this->command('SELECT '.$this->folderArg($folder));
 		if ($r['status'] !== 'OK') {
-			$this->error = 'Cannot open folder "'.$folder.'": '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImapFolder', 'Cannot open folder "%s": %s', $folder, $r['text']);
 			return false;
 		}
 		foreach ($r['untagged'] as $u) {
@@ -310,7 +312,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		}
 		$r = $this->command('UID SEARCH SINCE '.gmdate('j-M-Y', (int) $since));
 		if ($r['status'] !== 'OK') {
-			$this->error = 'IMAP search failed: '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImap', 'IMAP command %s failed: %s', 'SEARCH', $r['text']);
 			return false;
 		}
 		$uids = array();
@@ -329,7 +331,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		foreach (array_chunk($uids, 50) as $chunk) {
 			$r = $this->command('UID FETCH '.implode(',', $chunk).' (UID RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID FROM SUBJECT DATE CONTENT-TYPE)])');
 			if ($r['status'] !== 'OK') {
-				$this->error = 'IMAP fetch failed: '.$r['text'];
+				$this->error = einvoice_t('EInvoiceErrImap', 'IMAP command %s failed: %s', 'FETCH', $r['text']);
 				return false;
 			}
 			foreach ($r['untagged'] as $u) {
@@ -376,19 +378,19 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		}
 		$r = $this->command('UID FETCH '.((int) $id).' (UID RFC822.SIZE BODY.PEEK[])');
 		if ($r['status'] !== 'OK') {
-			$this->error = 'IMAP fetch failed: '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImap', 'IMAP command %s failed: %s', 'FETCH', $r['text']);
 			return false;
 		}
 		foreach ($r['untagged'] as $u) {
 			if (preg_match('/UID '.((int) $id).'\b/i', $u['text']) && isset($u['literals'][0])) {
 				if (strlen($u['literals'][0]) > self::MAX_MESSAGE_SIZE) {
-					$this->error = 'Message too large';
+					$this->error = einvoice_t('EInvoiceErrMailTooLarge', 'Mail too large');
 					return false;
 				}
 				return $u['literals'][0];
 			}
 		}
-		$this->error = 'Message '.$id.' not found';
+		$this->error = einvoice_t('EInvoiceErrMailNotFound', 'Mail %s not found', $id);
 		return false;
 	}
 
@@ -400,7 +402,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 	{
 		$r = $this->command('UID STORE '.((int) $id).' +FLAGS.SILENT (\\Seen)');
 		if ($r['status'] !== 'OK') {
-			$this->error = 'IMAP store failed: '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImap', 'IMAP command %s failed: %s', 'STORE', $r['text']);
 			return false;
 		}
 		return true;
@@ -420,7 +422,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		}
 		$r = $this->command('CREATE '.$this->folderArg($folder));
 		if ($r['status'] !== 'OK' && stripos($r['text'], 'exist') === false) {
-			$this->error = 'Cannot create folder "'.$folder.'": '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImapCreate', 'Cannot create folder "%s": %s', $folder, $r['text']);
 			return false;
 		}
 		$this->command('SUBSCRIBE '.$this->folderArg($folder));
@@ -441,19 +443,19 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 		if (in_array('MOVE', $this->caps, true)) {
 			$r = $this->command('UID MOVE '.$uid.' '.$this->folderArg($folder));
 			if ($r['status'] !== 'OK') {
-				$this->error = 'IMAP move failed: '.$r['text'];
+				$this->error = einvoice_t('EInvoiceErrImap', 'IMAP command %s failed: %s', 'MOVE', $r['text']);
 				return false;
 			}
 			return true;
 		}
 		$r = $this->command('UID COPY '.$uid.' '.$this->folderArg($folder));
 		if ($r['status'] !== 'OK') {
-			$this->error = 'IMAP copy failed: '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImap', 'IMAP command %s failed: %s', 'COPY', $r['text']);
 			return false;
 		}
 		$r = $this->command('UID STORE '.$uid.' +FLAGS.SILENT (\\Deleted)');
 		if ($r['status'] !== 'OK') {
-			$this->error = 'IMAP store failed: '.$r['text'];
+			$this->error = einvoice_t('EInvoiceErrImap', 'IMAP command %s failed: %s', 'STORE', $r['text']);
 			return false;
 		}
 		$r = $this->command(in_array('UIDPLUS', $this->caps, true) ? 'UID EXPUNGE '.$uid : 'EXPUNGE');
@@ -471,7 +473,7 @@ class EInvoiceConnectorImap extends EInvoiceConnector
 			$folder = $this->detectTrash();
 		}
 		if ($folder === '') {
-			$this->error = 'Trash folder not found, please set it in the module setup';
+			$this->error = einvoice_t('EInvoiceErrTrash', 'Trash folder not found, please set it in the module setup');
 			return false;
 		}
 		return $this->moveTo($id, $folder);

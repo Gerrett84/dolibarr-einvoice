@@ -173,6 +173,10 @@ if (getDolGlobalString('EINVOICE_CONN_TYPE')) {
 	$lastRun = getDolGlobalInt('EINVOICE_LAST_RUN');
 	$lastStatus = getDolGlobalString('EINVOICE_LAST_STATUS');
 	$lastMsg = getDolGlobalString('EINVOICE_LAST_MESSAGE');
+	$lastStats = json_decode(getDolGlobalString('EINVOICE_LAST_STATS'), true);
+	if ($lastStatus !== 'error' && is_array($lastStats)) {
+		$lastMsg = EInvoiceFetcher::summaryText($lastStats);
+	}
 	$lastOk = getDolGlobalInt('EINVOICE_LAST_FETCH');
 
 	print '<div class="info clearboth" style="display:flex;flex-wrap:wrap;gap:6px 24px;align-items:center">';

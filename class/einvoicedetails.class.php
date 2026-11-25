@@ -18,6 +18,8 @@ require_once __DIR__.'/einvoiceparser.class.php';
 /**
  * Full content of an e-invoice, as far as needed for a supplier invoice.
  */
+require_once __DIR__.'/../lib/einvoice.lib.php';
+
 class EInvoiceDetails
 {
 	/**
@@ -41,7 +43,7 @@ class EInvoiceDetails
 		$error = '';
 		$dom = EInvoiceParser::loadXml($xml, $error);
 		if (!$dom || !$dom->documentElement) {
-			$res['error'] = $error ? $error : 'Invalid XML';
+			$res['error'] = $error ? $error : einvoice_t('EInvoiceErrInvalidXml', 'Invalid XML');
 			return $res;
 		}
 		$root = $dom->documentElement;
@@ -54,7 +56,7 @@ class EInvoiceDetails
 			$res['syntax'] = 'ubl';
 			return self::addSummaryLines(self::readUbl($dom, $res));
 		}
-		$res['error'] = 'Not an e-invoice';
+		$res['error'] = einvoice_t('EInvoiceErrNotEInvoice', 'Not an e-invoice');
 		return $res;
 	}
 
@@ -383,22 +385,22 @@ class EInvoiceDetails
 		if (!empty($d['summary'])) {
 			$lines = (float) $d['tax_basis'];
 		} elseif ($d['line_total'] !== null && abs($lines - $d['line_total']) > 0.011) {
-			$p[] = sprintf('lines %.2f <> line total %.2f', $lines, $d['line_total']);
+			$p[] = einvoice_t('EInvoiceCheckLines', 'sum of lines %s <> line total %s', einvoice_amount($lines), einvoice_amount($d['line_total']));
 		}
 		$basis = $lines - $allow + $charge;
 		if ($d['tax_basis'] !== null && abs($basis - $d['tax_basis']) > 0.011) {
-			$p[] = sprintf('net %.2f <> tax basis %.2f', $basis, $d['tax_basis']);
+			$p[] = einvoice_t('EInvoiceCheckNet', 'net %s <> tax basis %s', einvoice_amount($basis), einvoice_amount($d['tax_basis']));
 		}
 		$tax = 0.0;
 		foreach ($d['taxes'] as $t) {
 			$tax += (float) $t['amount'];
 		}
 		if ($d['tax_total'] !== null && $d['taxes'] && abs($tax - $d['tax_total']) > 0.011) {
-			$p[] = sprintf('VAT breakdown %.2f <> VAT total %.2f', $tax, $d['tax_total']);
+			$p[] = einvoice_t('EInvoiceCheckVat', 'VAT breakdown %s <> VAT total %s', einvoice_amount($tax), einvoice_amount($d['tax_total']));
 		}
 		if ($d['grand_total'] !== null && $d['tax_basis'] !== null && $d['tax_total'] !== null
 			&& abs($d['tax_basis'] + $d['tax_total'] - $d['grand_total']) > 0.011) {
-			$p[] = sprintf('net + VAT %.2f <> gross %.2f', $d['tax_basis'] + $d['tax_total'], $d['grand_total']);
+			$p[] = einvoice_t('EInvoiceCheckGross', 'net + VAT %s <> gross %s', einvoice_amount($d['tax_basis'] + $d['tax_total']), einvoice_amount($d['grand_total']));
 		}
 		return $p;
 	}
